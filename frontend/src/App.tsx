@@ -9,7 +9,14 @@ import Profile from './pages/Profile';
 import Jobs from './pages/Jobs';
 import JobListings from './pages/JobListings';
 import Cache from './pages/Cache';
+import ApplicationsPage from './pages/ApplicationsPage';
 import DashboardLayout from './components/DashboardLayout';
+import AuthLayout from './pages/auth/AuthLayout';
+import LoginPage from './pages/auth/LoginPage';
+import SignupPage from './pages/auth/SignupPage';
+import MatchingPage from './pages/MatchingPage';
+import ContactsPage from './pages/ContactsPage';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,17 +29,30 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<Signup />} />
-          <Route path="/dashboard" element={<DashboardLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="profile"       element={<Profile />} />
-            <Route path="upload"        element={<Upload />} />
-            <Route path="bulk-mail"     element={<BulkMail />} />
-            <Route path="jobs"          element={<Jobs />} />
-            <Route path="job-listings"  element={<JobListings />} />
-            <Route path="cache"         element={<Cache />} />
+          <Route path="/auth" element={<AuthLayout />}>
+            <Route path="login" element={<LoginPage />} />
+            <Route path="register" element={<SignupPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+
+          {/* Protected dashboard routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="profile"       element={<Profile />} />
+              <Route path="upload"        element={<Upload />} />
+              <Route path="bulk-mail"     element={<BulkMail />} />
+              <Route path="jobs"          element={<Jobs />} />
+              <Route path="job-listings"  element={<JobListings />} />
+              <Route path="cache"         element={<Cache />} />
+              <Route path="applications" element={<ApplicationsPage />} />
+              <Route path="matching"      element={<MatchingPage />} />
+              <Route path="contacts"      element={<ContactsPage />} />
+            </Route>
+          </Route>
+
+          <Route path="*" element={<Navigate to="/auth/login" replace />} />
         </Routes>
       </BrowserRouter>
 

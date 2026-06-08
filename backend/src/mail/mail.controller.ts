@@ -7,10 +7,12 @@ import {
   Param,
   ParseFilePipeBuilder,
   Post,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiOperation,
@@ -20,10 +22,12 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { Request } from 'express';
 import { SendBulkMailDto } from './dto/send-bulk-mail.dto';
 import { MailService } from './mail.service';
 
 @ApiTags('mail')
+@ApiBearerAuth()
 @Controller('mail')
 export class MailController {
   constructor(private readonly mailService: MailService) {}
@@ -53,15 +57,10 @@ export class MailController {
           items: { type: 'string', format: 'email' },
           example: ['hr@example.com', 'recruiter@example.com'],
         },
-        userId: {
-          type: 'string',
-          description: 'Use this when the resume should be loaded from the existing user profile.',
-          example: '665df8d2f98f48bd8f04f2a1',
-        },
         resume: {
           type: 'string',
           format: 'binary',
-          description: 'Optional when userId is provided.',
+          description: 'Optional — if not provided, the resume from user profile is used.',
         },
         from: {
           type: 'string',
@@ -100,7 +99,13 @@ export class MailController {
     )
     resume: Express.Multer.File,
     @Body() body: SendBulkMailDto,
+    @Req() req: Request,
   ) {
+    const userId = (req.user as any)._id.toString();
+
+    // Inject the authenticated user's ID into the DTO
+    body.userId = userId;
+
     if (!resume && !body.userId) {
       throw new BadRequestException('Either resume PDF file or userId is required');
     }
@@ -148,29 +153,29 @@ export class MailController {
     return this.mailService.getJobStatus(jobId);
   }
 
-  // ── GET /mail/history/:userId ────────────────────────────────────────────
+  // ── GET /mail/history ────────────────────────────────────────────────────
 
-  @Get('history/:userId')
+  @Get('history')
   @ApiOperation({
-    summary: 'Get all bulk mail jobs for a user',
-    description: 'Returns all past and in-progress mail jobs for a given userId, sorted newest first.',
+    summary: 'Get all bulk mail jobs for the authenticated user',
+    description: 'Returns all past and in-progress mail jobs for the authenticated user, sorted newest first.',
   })
-  @ApiParam({ name: 'userId', example: '665df8d2f98f48bd8f04f2a1' })
   @ApiResponse({ status: 200, description: 'List of mail jobs for the user' })
-  async getHistory(@Param('userId') userId: string) {
+  async getHistory(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
     return this.mailService.getJobsForUser(userId);
   }
 
-  // ── GET /mail/stats/:userId ──────────────────────────────────────────────
+  // ── GET /mail/stats ──────────────────────────────────────────────────────
 
-  @Get('stats/:userId')
+  @Get('stats')
   @ApiOperation({
-    summary: 'Get aggregate mail stats for a user',
+    summary: 'Get aggregate mail stats for the authenticated user',
     description: 'Returns total sent, failed, pending counts across all bulk mail jobs.',
   })
-  @ApiParam({ name: 'userId', example: '665df8d2f98f48bd8f04f2a1' })
   @ApiResponse({ status: 200, description: 'Aggregate mail stats' })
-  async getStats(@Param('userId') userId: string) {
+  async getStats(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
     return this.mailService.getStatsForUser(userId);
   }
 }

@@ -3,7 +3,7 @@ import { ExternalLink, Download, FileText, Code2, Eye, AlertCircle } from 'lucid
 import JsonViewer from './JsonViewer';
 import type { ResumeData } from '../services/api';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = 'http://localhost:4000';
 
 interface ResumeViewerProps {
   data: ResumeData;
@@ -133,7 +133,7 @@ export default function ResumeViewer({ data }: ResumeViewerProps) {
                   </p>
                   <p className="text-sm text-gray-400">
                     Make sure the backend is running on{' '}
-                    <code className="bg-gray-100 px-1 rounded">localhost:3000</code>.
+                    <code className="bg-gray-100 px-1 rounded">localhost:4000</code>.
                   </p>
                   <div className="flex justify-center gap-3">
                     <a

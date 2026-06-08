@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as chalk from 'chalk';
+import * as cookieParser from 'cookie-parser';
 import * as figlet from 'figlet';
 import { AppModule } from './app.module';
 import { WinstonLoggerService } from './logger/winston-logger.service';
@@ -20,6 +21,8 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use(cookieParser());
+
   app.useGlobalPipes(
     new ValidationPipe({
       forbidNonWhitelisted: true,
@@ -36,7 +39,7 @@ async function bootstrap() {
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api-docs', app, swaggerDocument);
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 4000;
   await app.listen(port);
   const baseUrl = `http://localhost:${port}`;
   const swaggerUrl = `${baseUrl}/api-docs`;

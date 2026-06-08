@@ -25,6 +25,7 @@ export async function scrapeJSearch(
   const pages = Math.min(Math.ceil(maxResults / 10), 3);
 
   for (let page = 1; page <= pages; page++) {
+    const startTime = Date.now();
     try {
       const response = await axios.get('https://jsearch.p.rapidapi.com/search', {
         params: {
@@ -39,6 +40,11 @@ export async function scrapeJSearch(
         },
         timeout: 10000,
       });
+
+      const elapsed = Date.now() - startTime;
+      logger.log(
+        `[Scraper] JSearch API — success — elapsed: ${elapsed}ms, status: ${response.status}, page: ${page}`,
+      );
 
       const data = response.data?.data;
       if (!Array.isArray(data) || data.length === 0) break;
@@ -60,7 +66,13 @@ export async function scrapeJSearch(
         });
       }
     } catch (err: any) {
+      const elapsed = Date.now() - startTime;
       const status = err?.response?.status;
+      logger.error(
+        `[Scraper] JSearch API — failed — elapsed: ${elapsed}ms` +
+        `${status ? `, status: ${status}` : ''}, page: ${page}, error: ${err?.message}`,
+        err?.stack,
+      );
       if (status === 429) {
         logger.warn('JSearch: rate limit hit — stopping');
         break;
@@ -69,7 +81,6 @@ export async function scrapeJSearch(
         logger.warn('JSearch: invalid API key or quota exhausted');
         break;
       }
-      logger.warn(`JSearch error on page ${page}: ${err?.message}`);
       break;
     }
   }

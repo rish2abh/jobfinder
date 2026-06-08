@@ -35,7 +35,7 @@ interface FormValues {
 type ResumeOption = 'existing' | 'upload';
 
 // How often (ms) to poll the job status
-const POLL_INTERVAL = 3000;
+const POLL_INTERVAL = 4000;
 
 const STATE_CONFIG: Record<
   JobState,

@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { launchBrowser } from './scraper/browser.helper';
@@ -12,6 +12,8 @@ import { fetchJdsForTopJobs } from './scraper/jd-fetcher';
 import { buildSearchQueries, matchSkills } from './scraper/query-builder';
 import { JobsRepository } from './jobs.repository';
 import { buildDedupeHash } from './job.schema';
+import { MatchingService } from '../matching/matching.service';
+import { WinstonLoggerService } from '../logger/winston-logger.service';
 import {
   JOB_SCRAPE_JOB,
   JOB_SCRAPE_QUEUE,
@@ -23,11 +25,14 @@ import {
 
 @Processor(JOB_SCRAPE_QUEUE)
 export class JobScrapeProcessor extends WorkerHost {
-  private readonly logger = new Logger(JobScrapeProcessor.name);
+  private readonly context = 'JobScrapeProcessor';
 
   constructor(
     private readonly configService: ConfigService,
     private readonly jobsRepository: JobsRepository,
+    @Inject(forwardRef(() => MatchingService))
+    private readonly matchingService: MatchingService,
+    private readonly logger: WinstonLoggerService,
   ) {
     super();
   }
@@ -51,23 +56,32 @@ export class JobScrapeProcessor extends WorkerHost {
       ? [...keywords, country]
       : keywords;
 
-    this.logger.log(
-      `[Job ${job.id}] user=${userId} ` +
-      `skills=[${skills.join(', ')}] ` +
-      `companies=[${companies.join(', ')}] ` +
-      `keywords=[${effectiveKeywords.join(', ')}]` +
-      (country ? ` country=${country}` : ''),
-    );
+    this.logger.info('Job started', {
+      context: this.context,
+      jobId: job.id,
+      userId,
+      queue: JOB_SCRAPE_QUEUE,
+      skills,
+      companies,
+      keywords: effectiveKeywords,
+      country,
+    });
 
     await job.updateProgress(5);
 
     // ── 1. Build search queries ────────────────────────────────────────────
     const queries = buildSearchQueries(skills, companies, effectiveKeywords);
-    this.logger.log(`[Job ${job.id}] Queries: ${queries.join(' | ')}`);
+    this.logger.info(`Job progress: built ${queries.length} search queries`, {
+      context: this.context,
+      jobId: job.id,
+      userId,
+      queue: JOB_SCRAPE_QUEUE,
+    });
 
     const enabledSources = sources ?? ['google', 'jsearch', 'naukri', 'internshala', 'indeed'];
     let allRaw: ScrapedRawJob[] = [];
 
+    try {
     // ── 2. JSearch — API, no browser, runs first ───────────────────────────
     if (enabledSources.includes('jsearch')) {
       await job.updateProgress(8);
@@ -78,7 +92,12 @@ export class JobScrapeProcessor extends WorkerHost {
         jsearchJobs.forEach((j) => { if (targetCo) j.targetCompany = targetCo; });
         allRaw.push(...jsearchJobs);
       }
-      this.logger.log(`[Job ${job.id}] JSearch total: ${allRaw.length}`);
+      this.logger.info(`Job progress: JSearch scraped ${allRaw.length} results`, {
+        context: this.context,
+        jobId: job.id,
+        userId,
+        queue: JOB_SCRAPE_QUEUE,
+      });
     }
 
     // ── 3. Launch browser for Playwright scrapers ─────────────────────────
@@ -93,9 +112,14 @@ export class JobScrapeProcessor extends WorkerHost {
           try {
             const googleJobs = await scrapeGoogleJobs(browser, q, targetCo, maxPerSource);
             allRaw.push(...googleJobs);
-            this.logger.log(`[Job ${job.id}] Google Jobs "${q}": ${googleJobs.length}`);
+            this.logger.info(`Job progress: Google Jobs "${q}" returned ${googleJobs.length}`, {
+              context: this.context,
+              jobId: job.id,
+              userId,
+              queue: JOB_SCRAPE_QUEUE,
+            });
           } catch (err: any) {
-            this.logger.warn(`[Job ${job.id}] Google Jobs failed for "${q}": ${err?.message}`);
+            this.logger.warn(`Google Jobs failed for "${q}": ${err?.message}`, this.context);
           }
           await new Promise((r) => setTimeout(r, 1500));
         }
@@ -108,9 +132,14 @@ export class JobScrapeProcessor extends WorkerHost {
           try {
             const indeedJobs = await scrapeIndeed(browser, q, country ?? '', maxPerSource);
             allRaw.push(...indeedJobs);
-            this.logger.log(`[Job ${job.id}] Indeed "${q}": ${indeedJobs.length}`);
+            this.logger.info(`Job progress: Indeed "${q}" returned ${indeedJobs.length}`, {
+              context: this.context,
+              jobId: job.id,
+              userId,
+              queue: JOB_SCRAPE_QUEUE,
+            });
           } catch (err: any) {
-            this.logger.warn(`[Job ${job.id}] Indeed failed: ${err?.message}`);
+            this.logger.warn(`Indeed failed: ${err?.message}`, this.context);
           }
         }
       }
@@ -121,9 +150,14 @@ export class JobScrapeProcessor extends WorkerHost {
         try {
           const naukriJobs = await scrapeNaukri(browser, queries[0], country ?? '', maxPerSource);
           allRaw.push(...naukriJobs);
-          this.logger.log(`[Job ${job.id}] Naukri: ${naukriJobs.length}`);
+          this.logger.info(`Job progress: Naukri returned ${naukriJobs.length}`, {
+            context: this.context,
+            jobId: job.id,
+            userId,
+            queue: JOB_SCRAPE_QUEUE,
+          });
         } catch (err: any) {
-          this.logger.warn(`[Job ${job.id}] Naukri failed: ${err?.message}`);
+          this.logger.warn(`Naukri failed: ${err?.message}`, this.context);
         }
       }
 
@@ -133,9 +167,14 @@ export class JobScrapeProcessor extends WorkerHost {
         try {
           const internshalaJobs = await scrapeInternshala(browser, queries[0], maxPerSource);
           allRaw.push(...internshalaJobs);
-          this.logger.log(`[Job ${job.id}] Internshala: ${internshalaJobs.length}`);
+          this.logger.info(`Job progress: Internshala returned ${internshalaJobs.length}`, {
+            context: this.context,
+            jobId: job.id,
+            userId,
+            queue: JOB_SCRAPE_QUEUE,
+          });
         } catch (err: any) {
-          this.logger.warn(`[Job ${job.id}] Internshala failed: ${err?.message}`);
+          this.logger.warn(`Internshala failed: ${err?.message}`, this.context);
         }
       }
 
@@ -163,7 +202,12 @@ export class JobScrapeProcessor extends WorkerHost {
 
       if (topMatches.length > 0) {
         await job.updateProgress(72);
-        this.logger.log(`[Job ${job.id}] Fetching JDs for ${topMatches.length} top matches`);
+        this.logger.info(`Job progress: fetching JDs for ${topMatches.length} top matches`, {
+          context: this.context,
+          jobId: job.id,
+          userId,
+          queue: JOB_SCRAPE_QUEUE,
+        });
         await fetchJdsForTopJobs(browser, topMatches);
 
         for (const raw of topMatches) {
@@ -188,7 +232,12 @@ export class JobScrapeProcessor extends WorkerHost {
     }
 
     // ── 7. Store ──────────────────────────────────────────────────────────
-    this.logger.log(`[Job ${job.id}] Storing ${allRaw.length} raw results`);
+    this.logger.info(`Job progress: storing ${allRaw.length} raw results`, {
+      context: this.context,
+      jobId: job.id,
+      userId,
+      queue: JOB_SCRAPE_QUEUE,
+    });
 
     const finalSkillsMap = new Map<string, string[]>();
     for (const raw of allRaw) {
@@ -222,11 +271,60 @@ export class JobScrapeProcessor extends WorkerHost {
       durationMs: Date.now() - start,
     };
 
-    this.logger.log(
-      `[Job ${job.id}] Done — found: ${allRaw.length}, stored: ${inserted}, dupes: ${duplicates}, flagged: ${flagged} (${result.durationMs}ms)`,
-    );
+    this.logger.info('Job completed', {
+      context: this.context,
+      jobId: job.id,
+      userId,
+      queue: JOB_SCRAPE_QUEUE,
+      durationMs: result.durationMs,
+      totalFound: allRaw.length,
+      totalStored: inserted,
+      totalDuplicates: duplicates,
+      totalFlagged: flagged,
+    });
+
+    // ── Trigger matching: embed new jobs and compute scores ────────────────
+    if (inserted > 0 && userId) {
+      try {
+        // Get IDs of freshly inserted jobs (scraped within last minute)
+        const recentJobs = await this.jobsRepository.findBySkills(skills, {
+          limit: inserted,
+          sortBy: 'scrapedAt',
+        });
+        const newJobIds = recentJobs.map((j) => j._id.toString());
+
+        if (newJobIds.length > 0) {
+          await this.matchingService.onNewJobsScraped(userId, newJobIds);
+          this.logger.info(`Matching enqueued for ${newJobIds.length} new jobs`, {
+            context: this.context,
+            jobId: job.id,
+            userId,
+            queue: JOB_SCRAPE_QUEUE,
+          });
+        }
+      } catch (matchErr: any) {
+        // Non-blocking — don't fail the scrape job if matching enqueue fails
+        this.logger.warn(
+          `Failed to enqueue matching for user ${userId}: ${matchErr?.message}`,
+          this.context,
+        );
+      }
+    }
 
     return result;
+
+    } catch (err: any) {
+      const durationMs = Date.now() - start;
+      this.logger.errorWithMeta('Job failed', {
+        context: this.context,
+        jobId: job.id,
+        userId,
+        queue: JOB_SCRAPE_QUEUE,
+        durationMs,
+        trace: err?.stack || String(err),
+      });
+      throw err;
+    }
   }
 
   /** Extract first email address found in text */

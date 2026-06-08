@@ -1,15 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { MongoIdParamDto } from './dto/mongo-id-param.dto';
+import { Public } from '../auth/public.decorator';
 
 @ApiTags('users')
 @Controller('users')
@@ -18,14 +20,16 @@ export class UsersController {
 
   // ── POST /users ───────────────────────────────────────────────────────────
 
+  @Public()
   @Post()
-  @ApiOperation({ summary: 'Create a new user' })
+  @ApiOperation({ summary: 'Create a new user (legacy registration)' })
   async create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
 
   // ── GET /users/by-email/:email ───────────────────────────────────────────
 
+  @Public()
   @Get('by-email/:email')
   @ApiOperation({ summary: 'Find a user by email address (for returning user login)' })
   @ApiParam({ name: 'email', example: 'alice@example.com' })
@@ -33,22 +37,24 @@ export class UsersController {
     return this.usersService.findByEmail(email);
   }
 
-  // ── GET /users/:id ────────────────────────────────────────────────────────
+  // ── GET /users/me ─────────────────────────────────────────────────────────
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get user by ID' })
-  @ApiParam({ name: 'id', example: '665df8d2f98f48bd8f04f2a1' })
-  async findById(@Param() params: MongoIdParamDto) {
-    return this.usersService.findById(params.id);
+  @Get('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get the authenticated user' })
+  async findMe(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
+    return this.usersService.findById(userId);
   }
 
-  // ── GET /users/:id/resume ─────────────────────────────────────────────────
+  // ── GET /users/me/resume ──────────────────────────────────────────────────
 
-  @Get(':id/resume')
-  @ApiOperation({ summary: 'Get parsed resume details for a user' })
-  @ApiParam({ name: 'id', example: '665df8d2f98f48bd8f04f2a1' })
-  async getResume(@Param() params: MongoIdParamDto) {
-    const user = await this.usersService.findById(params.id);
+  @Get('me/resume')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get parsed resume details for the authenticated user' })
+  async getResume(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
+    const user = await this.usersService.findById(userId);
     return {
       resume:        user.resume,
       rawText:       user.resumeRawText,
@@ -56,53 +62,56 @@ export class UsersController {
     };
   }
 
-  // ── GET /users/:id/profile ────────────────────────────────────────────────
+  // ── GET /users/me/profile ─────────────────────────────────────────────────
 
-  @Get(':id/profile')
+  @Get('me/profile')
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get the structured job-application profile for a user',
+    summary: 'Get the structured job-application profile for the authenticated user',
     description:
       'Returns the profile object that is auto-populated from the parsed ' +
       'resume and editable by the user.',
   })
-  @ApiParam({ name: 'id', example: '665df8d2f98f48bd8f04f2a1' })
-  async getProfile(@Param() params: MongoIdParamDto) {
-    return this.usersService.getProfile(params.id);
+  async getProfile(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
+    return this.usersService.getProfile(userId);
   }
 
-  // ── PATCH /users/:id/profile ──────────────────────────────────────────────
+  // ── PATCH /users/me/profile ───────────────────────────────────────────────
 
-  @Patch(':id/profile')
+  @Patch('me/profile')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update the job-application profile (manual edits)',
     description:
       'All fields are optional — only provided fields are updated. ' +
       'Arrays (skills, experience, education, etc.) are replaced in full.',
   })
-  @ApiParam({ name: 'id', example: '665df8d2f98f48bd8f04f2a1' })
   @ApiBody({ type: UpdateProfileDto })
   @ApiResponse({
     status: 200,
     description: 'Updated user document',
   })
   async updateProfile(
-    @Param() params: MongoIdParamDto,
+    @Req() req: Request,
     @Body() dto: UpdateProfileDto,
   ) {
-    return this.usersService.updateProfile(params.id, dto);
+    const userId = (req.user as any)._id.toString();
+    return this.usersService.updateProfile(userId, dto);
   }
 
-  // ── POST /users/:id/profile/extract ──────────────────────────────────────
+  // ── POST /users/me/profile/extract ───────────────────────────────────────
 
-  @Post(':id/profile/extract')
+  @Post('me/profile/extract')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Re-extract profile from stored resume data',
     description:
       'Reads the existing parsed JSON (or raw text as fallback) and ' +
       'rebuilds the profile. Useful after re-parsing or when the profile is empty.',
   })
-  @ApiParam({ name: 'id', example: '665df8d2f98f48bd8f04f2a1' })
-  async extractProfile(@Param() params: MongoIdParamDto) {
-    return this.usersService.extractProfileFromResume(params.id);
+  async extractProfile(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
+    return this.usersService.extractProfileFromResume(userId);
   }
 }

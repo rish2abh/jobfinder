@@ -10,8 +10,13 @@ import {
   Search,
   List,
   Database,
+  BarChart3,
+  FileText,
+  Users,
 } from 'lucide-react';
 import { useUserStore } from '../store/userStore';
+import { useAuthStore } from '../store/authStore';
+import { logout as logoutApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 const navItems = [
@@ -21,17 +26,27 @@ const navItems = [
   { to: '/dashboard/jobs',          icon: Search,          label: 'Job Scraper' },
   { to: '/dashboard/job-listings',  icon: List,            label: 'Job Listings' },
   { to: '/dashboard/cache',         icon: Database,        label: 'Cache Manager' },
+  { to: '/dashboard/matching',      icon: BarChart3,       label: 'Job Matching' },
+  { to: '/dashboard/applications',  icon: FileText,        label: 'Applications' },
+  { to: '/dashboard/contacts',      icon: Users,           label: 'Contacts' },
   { to: '/dashboard/bulk-mail',     icon: Mail,            label: 'Bulk Mail' },
 ];
 
 export default function Sidebar() {
   const { user, clearUser } = useUserStore();
+  const { clearAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // Continue with local cleanup even if API call fails
+    }
+    clearAuth();
     clearUser();
     toast.success('Signed out successfully');
-    navigate('/');
+    navigate('/auth/login');
   };
 
   return (

@@ -97,7 +97,7 @@ npm run start:dev
   - Example curl (replace values):
 
     ```bash
-    curl -X POST "http://localhost:3000/uploads/resume" \
+    curl -X POST "http://localhost:4000/uploads/resume" \
       -F "file=@/path/to/resume.pdf" \
       -F "userId=64a1f2..."
     ```

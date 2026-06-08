@@ -8,6 +8,8 @@ export const MAIL_QUEUE = 'bulk-mail';
 
 export const MAIL_JOB = 'send-bulk-mail';
 
+export const TEMPLATE_MAIL_JOB = 'send-template-email';
+
 export interface BulkMailJobData {
   subject: string;
   context: string;
@@ -30,4 +32,26 @@ export interface BulkMailJobResult {
   failed: string[];
   sentCount: number;
   failedCount: number;
+}
+
+/**
+ * Job data for sending a personalized template email to a single recipient.
+ * One job per recipient is enqueued — rate limiting is handled at the queue level.
+ */
+export interface TemplateMailJobData {
+  userId: string;
+  bulkJobId: string;
+  groupId: string;
+  recipientEmail: string;
+  recipientName: string;
+  subject: string;
+  body: string;
+  from?: string;
+  resumeUrl?: string;          // Cloudinary URL for attachment
+}
+
+export interface TemplateMailJobResult {
+  recipientEmail: string;
+  status: 'sent' | 'failed';
+  failureReason?: string;
 }

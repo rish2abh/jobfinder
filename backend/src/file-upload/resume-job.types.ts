@@ -1,8 +1,11 @@
 export const RESUME_QUEUE = 'resume-parse';
 export const RESUME_JOB  = 'parse-resume';
 
-/** Maximum number of Ollama call attempts before giving up */
+/** Maximum number of LLM call attempts before giving up */
 export const LLM_MAX_ATTEMPTS = 3;
+
+/** Supported LLM providers for resume parsing */
+export type LlmProvider = 'ollama' | 'claude' | 'llamaparse';
 
 /**
  * Data stored in Redis for a resume-parse job.
@@ -18,6 +21,8 @@ export interface ResumeParseJobData {
   pdfBase64?: string;
   /** Pre-extracted plain text from pdf-parse — stored so LLM can be retried later */
   rawText: string;
+  /** LLM provider to use for parsing — defaults to 'ollama' */
+  provider?: LlmProvider;
 }
 
 export interface ResumeParseJobResult {

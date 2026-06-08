@@ -7,25 +7,23 @@ import {
   Param,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { IsMongoId } from 'class-validator';
+import { Request } from 'express';
 import { JobsService } from './jobs.service';
 import { TriggerScrapeDto } from './dto/trigger-scrape.dto';
 import type { JobSource } from './job.schema';
 
-class UserIdParam {
-  @IsMongoId()
-  userId: string;
-}
-
 @ApiTags('jobs')
+@ApiBearerAuth()
 @Controller('jobs')
 export class JobsController {
   private readonly logger = new Logger(JobsController.name);
@@ -63,16 +61,17 @@ export class JobsController {
       ],
     },
   })
-  async triggerScrape(@Body() dto: TriggerScrapeDto) {
+  async triggerScrape(@Req() req: Request, @Body() dto: TriggerScrapeDto) {
+    const userId = (req.user as any)._id.toString();
     const skills = dto.skills?.length
       ? dto.skills
-      : await this.jobsService.getSkillsFromResume(dto.userId);
+      : await this.jobsService.getSkillsFromResume(userId);
 
     if (skills.length === 0) {
       return { status: 'no_skills', message: 'No skills found — upload and parse your resume first.' };
     }
 
-    return this.jobsService.triggerScrape(dto.userId, skills, {
+    return this.jobsService.triggerScrape(userId, skills, {
       force:        dto.force,
       sources:      dto.sources,
       maxPerSource: dto.maxPerSource,
@@ -101,22 +100,24 @@ export class JobsController {
       'Uses skills from the user\'s parsed resume if no skill query is provided. ' +
       'Sorted by published date (most recent first), falling back to scrape date.',
   })
-  @ApiQuery({ name: 'userId',          required: true,  example: '665df8d2f98f48bd8f04f2a1' })
   @ApiQuery({ name: 'skills',          required: false, isArray: true, type: String })
   @ApiQuery({ name: 'source',          required: false, enum: ['indeed', 'naukri', 'internshala', 'jsearch', 'google', 'company'] })
   @ApiQuery({ name: 'experienceLevel', required: false, enum: ['any', 'auto', 'internship', 'entry', 'mid', 'senior', 'manager'] })
+  @ApiQuery({ name: 'keyword',         required: false, type: String, description: 'Keyword to filter by title and description (case-insensitive)' })
   @ApiQuery({ name: 'sortBy',          required: false, enum: ['postedAt', 'scrapedAt'] })
   @ApiQuery({ name: 'limit',           required: false, type: Number })
   @ApiQuery({ name: 'skip',            required: false, type: Number })
   async getJobs(
-    @Query('userId')          userId:           string,
+    @Req() req: Request,
     @Query('skills')          skills?:          string | string[],
     @Query('source')          source?:          string,
     @Query('experienceLevel') experienceLevel?: string,
+    @Query('keyword')         keyword?:         string,
     @Query('sortBy')          sortBy?:          string,
     @Query('limit')           limit?:           string,
     @Query('skip')            skip?:            string,
   ) {
+    const userId = (req.user as any)._id.toString();
     const skillArr = !skills
       ? []
       : Array.isArray(skills)
@@ -127,18 +128,19 @@ export class JobsController {
       skills:          skillArr,
       source:          source as JobSource | undefined,
       experienceLevel: experienceLevel ?? 'any',
+      keyword:         keyword?.trim() || undefined,
       sortBy:          (sortBy === 'scrapedAt' ? 'scrapedAt' : 'postedAt'),
       limit:           limit ? parseInt(limit,  10) : 50,
       skip:            skip  ? parseInt(skip,   10) : 0,
     });
   }
 
-  // ── GET /jobs/skills/:userId ───────────────────────────────────────────────
+  // ── GET /jobs/skills ───────────────────────────────────────────────────────
 
-  @Get('skills/:userId')
-  @ApiOperation({ summary: "Retrieve skills extracted from the user's parsed resume" })
-  @ApiParam({ name: 'userId', example: '665df8d2f98f48bd8f04f2a1' })
-  async getSkills(@Param('userId') userId: string) {
+  @Get('skills')
+  @ApiOperation({ summary: "Retrieve skills extracted from the authenticated user's parsed resume" })
+  async getSkills(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
     const skills = await this.jobsService.getSkillsFromResume(userId);
     return { userId, skills };
   }

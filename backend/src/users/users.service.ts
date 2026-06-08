@@ -6,7 +6,7 @@ import {
   extractProfileFromParsedJson,
   extractProfileFromRawText,
 } from './profile-extractor';
-import type { UserProfile } from './user.schema';
+import type { RefreshTokenEntry, UserProfile } from './user.schema';
 
 @Injectable()
 export class UsersService {
@@ -127,5 +127,35 @@ export class UsersService {
       email: updated.email,
       ...(updated.profile as UserProfile ?? {}),
     };
+  }
+
+  // ── Auth-related methods (delegating to repository) ─────────────────────
+
+  async findByEmailOptional(email: string) {
+    return this.usersRepository.findByEmail(email);
+  }
+
+  async updatePassword(userId: string, hashedPassword: string) {
+    return this.usersRepository.updatePassword(userId, hashedPassword);
+  }
+
+  async addRefreshToken(userId: string, tokenEntry: RefreshTokenEntry) {
+    return this.usersRepository.addRefreshToken(userId, tokenEntry);
+  }
+
+  async removeRefreshToken(userId: string, tokenHash: string) {
+    return this.usersRepository.removeRefreshToken(userId, tokenHash);
+  }
+
+  async incrementFailedAttempts(userId: string) {
+    return this.usersRepository.incrementFailedAttempts(userId);
+  }
+
+  async resetFailedAttempts(userId: string) {
+    return this.usersRepository.resetFailedAttempts(userId);
+  }
+
+  async lockAccount(userId: string, lockedUntil: Date) {
+    return this.usersRepository.lockAccount(userId, lockedUntil);
   }
 }

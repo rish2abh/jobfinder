@@ -92,7 +92,7 @@ function buildMinimalPrompt(rawText: string): string {
 }
 
 Resume text:
-${rawText.slice(0, 3000)}
+${rawText.slice(0, 4000)}
 
 JSON:
 {`;
@@ -237,6 +237,7 @@ export async function parseResumeWithOllama(
 
     let responseText = '';
 
+    const startTime = Date.now();
     try {
       // ── Use native /api/generate endpoint ──────────────────────────────
       // This endpoint works reliably across ALL Ollama models including phi,
@@ -261,6 +262,11 @@ export async function parseResumeWithOllama(
         },
       );
 
+      const elapsed = Date.now() - startTime;
+      logger.log(
+        `[Ollama] resume-parse — success — elapsed: ${elapsed}ms, status: ${response.status}`,
+      );
+
       responseText = extractResponseText(response.data);
 
       if (!responseText) {
@@ -273,9 +279,15 @@ export async function parseResumeWithOllama(
         }
       }
     } catch (err) {
+      const elapsed = Date.now() - startTime;
       const axiosErr = err as AxiosError;
       lastError = axiosErr.message ?? String(err);
-      logger.warn(`Ollama HTTP error on attempt ${attempt}: ${lastError}`);
+      const status = axiosErr.response?.status;
+      logger.error(
+        `[Ollama] resume-parse — failed — elapsed: ${elapsed}ms` +
+        `${status ? `, status: ${status}` : ''}, error: ${lastError}`,
+        (err as Error)?.stack,
+      );
 
       if (attempt === LLM_MAX_ATTEMPTS) {
         throw new Error(`Ollama unreachable after ${LLM_MAX_ATTEMPTS} attempts: ${lastError}`);

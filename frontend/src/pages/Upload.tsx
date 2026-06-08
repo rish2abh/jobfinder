@@ -21,10 +21,11 @@ import {
   uploadResume,
   getResumeParseJobStatus,
   type ResumeParseJobStatus,
+  type LlmProvider,
 } from '../services/api';
 import { useUserStore } from '../store/userStore';
 
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 4000;
 
 type ParseStage =
   | 'idle'
@@ -44,6 +45,7 @@ export default function Upload() {
   const [cloudinaryUrl, setCloudinaryUrl] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [provider, setProvider] = useState<LlmProvider>('ollama');
 
   // ── Poll the parse job ─────────────────────────────────────────────────────
   const jobStatusQuery = useQuery<ResumeParseJobStatus>({
@@ -88,6 +90,7 @@ export default function Upload() {
       uploadResume({
         userId: userId!,
         file: file!,
+        provider,
         onUploadProgress: (pct) => {
           setUploadProgress(pct);
           if (pct === 100) setStage('queued');
@@ -120,7 +123,7 @@ export default function Upload() {
     idle:       '',
     uploading:  `Uploading to Cloudinary… ${uploadProgress}%`,
     queued:     'File uploaded — waiting for AI worker…',
-    parsing:    `AI parsing with Ollama… ${jobData?.progress ?? 0}%`,
+    parsing:    `AI parsing with ${provider === 'claude' ? 'Claude' : provider === 'llamaparse' ? 'LlamaParse' : 'Ollama'}… ${jobData?.progress ?? 0}%`,
     completed:  'Parsing complete',
     failed:     'Parsing failed',
   };
@@ -147,6 +150,62 @@ export default function Upload() {
             selectedFile={file}
             label="Drag & drop your resume PDF here"
           />
+        </div>
+
+        {/* Provider selector */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 mb-2 block">AI Provider</label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setProvider('ollama')}
+              disabled={isRunning}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                provider === 'ollama'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <span className="text-lg">🦙</span>
+              Ollama
+              <span className="text-xs text-gray-400 font-normal">(Local)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProvider('claude')}
+              disabled={isRunning}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                provider === 'claude'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <span className="text-lg">✨</span>
+              Claude
+              <span className="text-xs text-gray-400 font-normal">(API)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setProvider('llamaparse')}
+              disabled={isRunning}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                provider === 'llamaparse'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <span className="text-lg">📄</span>
+              LlamaParse
+              <span className="text-xs text-gray-400 font-normal">(API)</span>
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-1.5">
+            {provider === 'ollama'
+              ? 'Runs locally on your machine — requires Ollama to be running.'
+              : provider === 'claude'
+              ? 'Uses Anthropic Claude API — requires CLAUDE_API_KEY in backend .env.'
+              : 'Uses LlamaParse (LlamaIndex Cloud) — best for complex PDF layouts. Requires LLAMAPARSE_API_KEY.'}
+          </p>
         </div>
 
         {/* Upload progress bar */}
@@ -184,7 +243,7 @@ export default function Upload() {
         {[
           { step: '1', title: 'Upload PDF',       desc: 'Stored securely on Cloudinary',         color: 'bg-blue-500',   done: stage !== 'idle' && stage !== 'uploading' },
           { step: '2', title: 'Text Extraction',  desc: 'pdf-parse reads the raw PDF text',       color: 'bg-purple-500', done: stage === 'parsing' || stage === 'completed' || stage === 'failed' },
-          { step: '3', title: 'AI Parsing',        desc: 'Ollama structures it into clean JSON',  color: 'bg-green-500',  done: stage === 'completed' },
+          { step: '3', title: 'AI Parsing',        desc: `${provider === 'claude' ? 'Claude' : provider === 'llamaparse' ? 'LlamaParse' : 'Ollama'} structures it into clean JSON`,  color: 'bg-green-500',  done: stage === 'completed' },
         ].map(({ step, title, desc, color, done }) => (
           <div key={step} className={`card p-4 text-center transition-all ${done ? 'ring-2 ring-green-400' : ''}`}>
             <div className={`w-8 h-8 ${done ? 'bg-green-500' : color} rounded-full flex items-center justify-center text-white text-sm font-bold mx-auto mb-2 transition-colors`}>
@@ -226,7 +285,11 @@ export default function Upload() {
                   />
                 </div>
                 <p className="text-xs text-gray-400">
-                  Ollama can take 10–30 seconds on a mid-range laptop. Hang tight…
+                  {provider === 'claude'
+                    ? 'Claude typically responds in 5–15 seconds.'
+                    : provider === 'llamaparse'
+                    ? 'LlamaParse processes PDFs in 10–30 seconds for best structural extraction.'
+                    : 'Ollama can take 10–30 seconds on a mid-range laptop. Hang tight…'}
                 </p>
               </div>
             )}

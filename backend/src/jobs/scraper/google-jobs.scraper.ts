@@ -131,7 +131,7 @@ export async function scrapeGoogleJobs(
         const jdEl = card.querySelector(
           '.HBvzbc, .job-description, [class*="description"]',
         );
-        const jd = jdEl?.textContent?.trim().slice(0, 3000) ?? '';
+        const jd = jdEl?.textContent?.trim().slice(0, 4000) ?? '';
 
         jobs.push({ title, company, location, postedAt, jd, applyUrl, scrapeUrl: window.location.href });
       }

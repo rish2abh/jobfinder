@@ -1,6 +1,15 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
+// ── Auth sub-schemas ────────────────────────────────────────────────────────
+
+export interface RefreshTokenEntry {
+  token: string;         // hashed refresh token
+  expiresAt: Date;
+  createdAt: Date;
+  revoked: boolean;
+}
+
 // ── Nested sub-schemas ──────────────────────────────────────────────────────
 
 export interface ExperienceItem {
@@ -87,6 +96,20 @@ export class User {
    */
   @Prop({ type: Object, default: {} })
   profile: UserProfile;
+
+  // ── Auth fields ─────────────────────────────────────────────────────────
+
+  @Prop()
+  password?: string; // bcrypt hashed
+
+  @Prop({ type: [Object], default: [] })
+  refreshTokens: RefreshTokenEntry[];
+
+  @Prop({ default: 0 })
+  failedLoginAttempts: number;
+
+  @Prop()
+  accountLockedUntil?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

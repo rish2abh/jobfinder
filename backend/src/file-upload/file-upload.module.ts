@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { UsersModule } from '../users/users.module';
+import { MatchingModule } from '../matching/matching.module';
 import { FileUploadController } from './file-upload.controller';
 import { FileUploadService } from './file-upload.service';
 import { ResumeParseProcessor } from './resume-parse.processor';
@@ -14,6 +15,7 @@ import { LoggerModule } from '../logger/logger.module';
     ConfigModule,
     UsersModule,
     LoggerModule,
+    forwardRef(() => MatchingModule),
 
     BullModule.registerQueueAsync({
       name: RESUME_QUEUE,
@@ -22,7 +24,7 @@ import { LoggerModule } from '../logger/logger.module';
         connection: buildRedisConnection(configService),
         defaultJobOptions: {
           attempts: 2,
-          backoff: { type: 'fixed', delay: 3000 },
+          backoff: { type: 'fixed', delay: 4000 },
         },
       }),
       inject: [ConfigService],

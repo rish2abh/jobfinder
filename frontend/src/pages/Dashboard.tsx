@@ -11,10 +11,11 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react';
-import { getUserById, getUserResume } from '../services/api';
+import { getUserMe, getUserResume } from '../services/api';
 import { useUserStore } from '../store/userStore';
 import ResumeViewer from '../components/ResumeViewer';
 import MailDashboard from '../components/MailDashboard';
+import BackgroundJobs from '../components/BackgroundJobs';
 
 function StatCard({
   label,
@@ -45,7 +46,7 @@ export default function Dashboard() {
 
   const userQuery = useQuery({
     queryKey: ['user', userId],
-    queryFn: () => getUserById(userId!),
+    queryFn: () => getUserMe(),
     enabled: !!userId,
     initialData: storedUser ?? undefined,
   });
@@ -156,6 +157,9 @@ export default function Dashboard() {
 
       {/* Mail Dashboard */}
       <MailDashboard />
+
+      {/* Background Jobs Monitor */}
+      <BackgroundJobs />
 
       {/* Profile info */}
       {user && (

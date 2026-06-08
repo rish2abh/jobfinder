@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
@@ -19,9 +19,13 @@ const toArray = ({ value }: { value: unknown }) =>
   Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
 
 export class TriggerScrapeDto {
-  @ApiProperty({ example: '665df8d2f98f48bd8f04f2a1' })
+  @ApiPropertyOptional({
+    description: 'Deprecated: userId is now derived from the JWT token. This field is ignored.',
+    example: '665df8d2f98f48bd8f04f2a1',
+  })
+  @IsOptional()
   @IsMongoId()
-  userId: string;
+  userId?: string;
 
   @ApiPropertyOptional({
     description: "Skill keywords. If omitted, uses skills from the user's parsed resume.",

@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, Job } from 'bullmq';
 import { SendBulkMailDto } from './dto/send-bulk-mail.dto';
@@ -15,7 +12,8 @@ import {
 @Injectable()
 export class MailService {
   constructor(
-    @InjectQueue(MAIL_QUEUE) private readonly mailQueue: Queue<BulkMailJobData, BulkMailJobResult>,
+    @InjectQueue(MAIL_QUEUE)
+    private readonly mailQueue: Queue<BulkMailJobData, BulkMailJobResult>,
   ) {}
 
   /**
@@ -35,11 +33,16 @@ export class MailService {
       fromTtlSeconds: dto.fromTtlSeconds,
     };
 
-    // Serialise the file buffer to base64 so it can be stored in Redis
+    // Serialise only the Cloudinary URL reference — storing the full PDF as base64
+    // in Redis causes massive memory usage (15MB PDF → ~20MB base64 per job).
+    // The processor already falls back to fetching from Cloudinary when no base64 is present.
     if (resume?.buffer) {
-      jobData.resumeBase64 = resume.buffer.toString('base64');
       jobData.resumeFilename = resume.originalname || 'resume.pdf';
       jobData.resumeMimetype = resume.mimetype || 'application/pdf';
+      // Only store a small resume (under 512KB) inline; larger files use Cloudinary URL
+      if (resume.buffer.length <= 512 * 1024) {
+        jobData.resumeBase64 = resume.buffer.toString('base64');
+      }
     }
 
     const job = await this.mailQueue.add(MAIL_JOB, jobData, {
@@ -98,17 +101,19 @@ export class MailService {
    * Returns all bulk-mail jobs for a given userId, across all states.
    * BullMQ stores jobs in Redis — we pull completed + failed + active + waiting.
    */
-  async getJobsForUser(userId: string): Promise<Array<{
-    jobId: string;
-    state: string;
-    subject: string;
-    recipientCount: number;
-    sentCount: number;
-    failedCount: number;
-    timestamp: number;
-    result: BulkMailJobResult | null;
-    failedReason: string | null;
-  }>> {
+  async getJobsForUser(userId: string): Promise<
+    Array<{
+      jobId: string;
+      state: string;
+      subject: string;
+      recipientCount: number;
+      sentCount: number;
+      failedCount: number;
+      timestamp: number;
+      result: BulkMailJobResult | null;
+      failedReason: string | null;
+    }>
+  > {
     // Fetch jobs from all states that BullMQ keeps in Redis
     const [completed, failed, active, waiting, delayed] = await Promise.all([
       this.mailQueue.getCompleted(0, 100),
@@ -118,7 +123,13 @@ export class MailService {
       this.mailQueue.getDelayed(0, 50),
     ]);
 
-    const allJobs = [...completed, ...failed, ...active, ...waiting, ...delayed];
+    const allJobs = [
+      ...completed,
+      ...failed,
+      ...active,
+      ...waiting,
+      ...delayed,
+    ];
 
     // Filter by userId
     const userJobs = allJobs.filter((j) => j.data?.userId === userId);
@@ -175,7 +186,8 @@ export class MailService {
     const completedJobs = jobs.filter((j) => j.state === 'completed').length;
     const failedJobs = jobs.filter((j) => j.state === 'failed').length;
     const pendingJobs = jobs.filter(
-      (j) => j.state === 'waiting' || j.state === 'active' || j.state === 'delayed',
+      (j) =>
+        j.state === 'waiting' || j.state === 'active' || j.state === 'delayed',
     ).length;
 
     return {

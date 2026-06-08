@@ -4,11 +4,15 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
 import { LoggerModule } from './logger/logger.module';
 import { MailModule } from './mail/mail.module';
 import { UsersModule } from './users/users.module';
 import { JobsModule } from './jobs/jobs.module';
+import { MatchingModule } from './matching/matching.module';
+import { AutoApplyModule } from './auto-apply/auto-apply.module';
+import { BulkContactModule } from './bulk-contact/bulk-contact.module';
 import { buildRedisConnection } from './mail/bull-redis.config';
 
 @Module({
@@ -24,10 +28,14 @@ import { buildRedisConnection } from './mail/bull-redis.config';
       inject: [ConfigService],
     }),
 
+    AuthModule,
     UsersModule,
     FileUploadModule,
     MailModule,
     JobsModule,
+    MatchingModule,
+    AutoApplyModule,
+    BulkContactModule,
     LoggerModule,
   ],
   controllers: [AppController],

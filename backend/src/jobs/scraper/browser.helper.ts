@@ -1,5 +1,8 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { Logger } from '@nestjs/common';
 import { MIN_DELAY_MS, MAX_DELAY_MS } from '../job-scrape.types';
+
+const logger = new Logger('BrowserHelper');
 
 /**
  * A pool of realistic User-Agent strings for desktop Chrome.
@@ -94,10 +97,21 @@ export async function safeGoto(
   url: string,
   timeoutMs = 20000,
 ): Promise<boolean> {
+  const startTime = Date.now();
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    const elapsed = Date.now() - startTime;
+    const status = response?.status() ?? 0;
+    logger.log(
+      `[Scraper] page.goto — success — elapsed: ${elapsed}ms, status: ${status}, url: ${url.slice(0, 120)}`,
+    );
     return true;
-  } catch {
+  } catch (err: any) {
+    const elapsed = Date.now() - startTime;
+    logger.error(
+      `[Scraper] page.goto — failed — elapsed: ${elapsed}ms, url: ${url.slice(0, 120)}, error: ${err.message}`,
+      err.stack,
+    );
     return false;
   }
 }

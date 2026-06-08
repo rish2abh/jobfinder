@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User, UserDocument, UserProfile } from './user.schema';
+import { User, UserDocument, UserProfile, RefreshTokenEntry } from './user.schema';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 
 type ResumeData = {
@@ -79,6 +79,64 @@ export class UsersRepository {
             ...(topLevelUpdates?.email ? { email: topLevelUpdates.email } : {}),
           },
         },
+        { new: true },
+      )
+      .exec();
+  }
+
+  // ── Auth-related methods ────────────────────────────────────────────────
+
+  async updatePassword(userId: string, hashedPassword: string) {
+    return this.userModel
+      .findByIdAndUpdate(userId, { $set: { password: hashedPassword } }, { new: true })
+      .exec();
+  }
+
+  async addRefreshToken(userId: string, tokenEntry: RefreshTokenEntry) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $push: { refreshTokens: tokenEntry } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  async removeRefreshToken(userId: string, tokenHash: string) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $pull: { refreshTokens: { token: tokenHash } } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  async incrementFailedAttempts(userId: string) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $inc: { failedLoginAttempts: 1 } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  async resetFailedAttempts(userId: string) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $set: { failedLoginAttempts: 0, accountLockedUntil: null } },
+        { new: true },
+      )
+      .exec();
+  }
+
+  async lockAccount(userId: string, lockedUntil: Date) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $set: { accountLockedUntil: lockedUntil, failedLoginAttempts: 0 } },
         { new: true },
       )
       .exec();

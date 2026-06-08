@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  Body,
   Controller,
   Get,
   HttpStatus,
@@ -9,11 +8,13 @@ import {
   ParseFilePipeBuilder,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiOperation,
@@ -24,18 +25,12 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { IsMongoId } from 'class-validator';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import axios from 'axios';
 import { FileUploadService } from './file-upload.service';
-import { UploadResumeDto } from './dto/upload-resume.dto';
-
-class ReparseResumeDto {
-  @IsMongoId()
-  userId: string;
-}
 
 @ApiTags('uploads')
+@ApiBearerAuth()
 @Controller('uploads')
 export class FileUploadController {
   private readonly logger = new Logger(FileUploadController.name);
@@ -57,10 +52,15 @@ export class FileUploadController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['userId', 'file'],
+      required: ['file'],
       properties: {
-        userId: { type: 'string', example: '665df8d2f98f48bd8f04f2a1' },
         source: { type: 'string', example: 'local' },
+        provider: {
+          type: 'string',
+          enum: ['ollama', 'claude', 'llamaparse'],
+          example: 'ollama',
+          description: 'LLM provider to use for parsing',
+        },
         file: { type: 'string', format: 'binary' },
       },
     },
@@ -71,8 +71,8 @@ export class FileUploadController {
     schema: {
       type: 'object',
       properties: {
-        jobId:         { type: 'string', example: '7' },
-        status:        { type: 'string', example: 'queued' },
+        jobId: { type: 'string', example: '7' },
+        status: { type: 'string', example: 'queued' },
         cloudinaryUrl: { type: 'string' },
       },
     },
@@ -88,12 +88,22 @@ export class FileUploadController {
       new ParseFilePipeBuilder()
         .addFileTypeValidator({ fileType: 'pdf' })
         .addMaxSizeValidator({ maxSize: 15 * 1024 * 1024 })
-        .build({ errorHttpStatusCode: HttpStatus.BAD_REQUEST, fileIsRequired: true }),
+        .build({
+          errorHttpStatusCode: HttpStatus.BAD_REQUEST,
+          fileIsRequired: true,
+        }),
     )
     file: Express.Multer.File,
-    @Body() body: UploadResumeDto,
+    @Req() req: Request,
   ) {
-    return this.fileUploadService.uploadResume(file, body.userId);
+    const userId = (req.user as any)._id.toString();
+    const providerInput = req.body?.provider as string | undefined;
+    const validProviders = ['ollama', 'claude', 'llamaparse'] as const;
+    const provider: 'ollama' | 'claude' | 'llamaparse' =
+      validProviders.includes(providerInput as any)
+        ? (providerInput as 'ollama' | 'claude' | 'llamaparse')
+        : 'ollama';
+    return this.fileUploadService.uploadResume(file, userId, provider);
   }
 
   // ── GET /uploads/resume/status/:jobId ─────────────────────────────────────
@@ -113,8 +123,9 @@ export class FileUploadController {
   @ApiOperation({
     summary: 'Re-run Ollama parsing on stored raw text — no re-upload needed',
   })
-  async reparseResume(@Body() body: ReparseResumeDto) {
-    return this.fileUploadService.reparseResume(body.userId);
+  async reparseResume(@Req() req: Request) {
+    const userId = (req.user as any)._id.toString();
+    return this.fileUploadService.reparseResume(userId);
   }
 
   // ── GET /uploads/resume/proxy ──────────────────────────────────────────────
@@ -142,7 +153,11 @@ export class FileUploadController {
       'Content-Disposition: inline so the browser displays it natively. ' +
       'Pass the full Cloudinary URL as the `url` query parameter.',
   })
-  @ApiQuery({ name: 'url', required: true, description: 'Cloudinary PDF URL to proxy' })
+  @ApiQuery({
+    name: 'url',
+    required: true,
+    description: 'Cloudinary PDF URL to proxy',
+  })
   async proxyPdf(@Query('url') url: string, @Res() res: Response) {
     if (!url) {
       throw new BadRequestException('url query parameter is required');
@@ -156,8 +171,15 @@ export class FileUploadController {
       throw new BadRequestException('Invalid URL');
     }
 
-    if (!parsed.hostname.endsWith('cloudinary.com')) {
-      throw new BadRequestException('Only Cloudinary URLs are allowed');
+    // Strict domain check — only allow res.cloudinary.com (the CDN hostname)
+    // A simple endsWith check is vulnerable to subdomain spoofing (e.g. evil-cloudinary.com)
+    const allowed =
+      parsed.hostname === 'res.cloudinary.com' ||
+      parsed.hostname.endsWith('.res.cloudinary.com');
+    if (!allowed) {
+      throw new BadRequestException(
+        'Only Cloudinary CDN URLs (res.cloudinary.com) are allowed',
+      );
     }
 
     try {
@@ -185,7 +207,9 @@ export class FileUploadController {
     } catch (err: any) {
       const status = err?.response?.status ?? 502;
       this.logger.error(`PDF proxy failed for ${url}: ${err?.message}`);
-      res.status(status).json({ message: `Failed to fetch PDF: ${err?.message}` });
+      res
+        .status(status)
+        .json({ message: `Failed to fetch PDF: ${err?.message}` });
     }
   }
 }

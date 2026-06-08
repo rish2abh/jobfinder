@@ -128,6 +128,7 @@ export class JobsService {
       skip?: number;
       source?: JobSource;
       experienceLevel?: string;   // 'auto' | 'internship' | 'entry' | 'mid' | 'senior' | 'manager' | 'any'
+      keyword?: string;
       sortBy?: 'postedAt' | 'scrapedAt';
     } = {},
   ) {
@@ -164,11 +165,13 @@ export class JobsService {
         source:             options.source,
         excludeFlagged:     true,
         experienceKeywords,
+        keyword:            options.keyword,
         sortBy:             options.sortBy ?? 'postedAt',
       }),
       this.jobsRepository.countBySkills(skills, {
         source:             options.source,
         experienceKeywords,
+        keyword:            options.keyword,
       }),
     ]);
 

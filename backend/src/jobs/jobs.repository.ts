@@ -87,6 +87,7 @@ export class JobsRepository {
       source?: JobSource;
       excludeFlagged?: boolean;
       experienceKeywords?: string[];
+      keyword?: string;
       sortBy?: 'postedAt' | 'scrapedAt';
     } = {},
   ): Promise<JobDocument[]> {
@@ -117,6 +118,17 @@ export class JobsRepository {
         .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
         .join('|');
       andClauses.push({ title: { $regex: regex, $options: 'i' } });
+    }
+
+    // Custom keyword filter — matches against both title AND jd (case-insensitive)
+    if (options.keyword) {
+      const escapedKeyword = options.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      andClauses.push({
+        $or: [
+          { title: { $regex: escapedKeyword, $options: 'i' } },
+          { jd: { $regex: escapedKeyword, $options: 'i' } },
+        ],
+      });
     }
 
     if (andClauses.length > 0) filter.$and = andClauses;
@@ -153,6 +165,7 @@ export class JobsRepository {
       excludeFlagged?: boolean;
       source?: JobSource;
       experienceKeywords?: string[];
+      keyword?: string;
     } = {},
   ): Promise<number> {
     const filter: FilterQuery<JobDocument> = {};
@@ -180,6 +193,17 @@ export class JobsRepository {
         .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
         .join('|');
       andClauses.push({ title: { $regex: regex, $options: 'i' } });
+    }
+
+    // Custom keyword filter — matches against both title AND jd (case-insensitive)
+    if (options.keyword) {
+      const escapedKeyword = options.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      andClauses.push({
+        $or: [
+          { title: { $regex: escapedKeyword, $options: 'i' } },
+          { jd: { $regex: escapedKeyword, $options: 'i' } },
+        ],
+      });
     }
 
     if (andClauses.length > 0) filter.$and = andClauses;
@@ -289,6 +313,11 @@ export class JobsRepository {
 
   async findById(id: string): Promise<JobDocument | null> {
     return this.model.findById(id).exec();
+  }
+
+  async findByIds(ids: string[]): Promise<JobDocument[]> {
+    if (ids.length === 0) return [];
+    return this.model.find({ _id: { $in: ids } }).exec();
   }
 
   async deleteById(id: string): Promise<boolean> {

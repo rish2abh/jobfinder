@@ -42,7 +42,7 @@ export async function scrapeInternshala(
         break;
       }
 
-      await randomDelay(1500, 3000);
+      await randomDelay(1500, 4000);
 
       if (await isCaptchaPage(page)) {
         logger.warn('Internshala: bot-wall detected — stopping');

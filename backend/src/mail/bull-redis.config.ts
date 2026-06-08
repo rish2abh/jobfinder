@@ -14,14 +14,18 @@ export function buildRedisConnection(configService: ConfigService): {
   port: number;
   password: string;
   username: string;
-  tls: ConnectionOptions;
+  tls?: ConnectionOptions;
   maxRetriesPerRequest: null;
   enableReadyCheck: false;
 } {
-  const url = configService.get<string>('UPSTASH_REDIS_URL') || configService.get<string>('REDIS_URL');
+  const url =
+    configService.get<string>('UPSTASH_REDIS_URL') ||
+    configService.get<string>('REDIS_URL');
 
   if (!url) {
-    throw new Error('UPSTASH_REDIS_URL or REDIS_URL is not set in environment variables');
+    throw new Error(
+      'UPSTASH_REDIS_URL or REDIS_URL is not set in environment variables',
+    );
   }
 
   const parsed = new URL(url);
@@ -30,9 +34,11 @@ export function buildRedisConnection(configService: ConfigService): {
   const host = parsed.hostname;
   const port = parseInt(parsed.port || (isTls ? '6379' : '6379'), 10);
   const password = parsed.password ? decodeURIComponent(parsed.password) : '';
-  const username = parsed.username ? decodeURIComponent(parsed.username) : 'default';
+  const username = parsed.username
+    ? decodeURIComponent(parsed.username)
+    : 'default';
 
-  return {
+  const connection: any = {
     host,
     port,
     password,
@@ -41,7 +47,13 @@ export function buildRedisConnection(configService: ConfigService): {
     maxRetriesPerRequest: null,
     // Required to avoid ioredis stalling before queue is ready
     enableReadyCheck: false,
-    // Upstash always requires TLS
-    tls: isTls ? ({} as ConnectionOptions) : undefined,
   };
+
+  // Only set tls when the URL scheme is rediss:// — passing undefined causes
+  // ioredis to throw in some versions.
+  if (isTls) {
+    connection.tls = {} as ConnectionOptions;
+  }
+
+  return connection;
 }
