@@ -12,45 +12,43 @@ import type { ConnectionOptions } from 'tls';
 export function buildRedisConnection(configService: ConfigService): {
   host: string;
   port: number;
-  password: string;
-  username: string;
+  password?: string;
+  username?: string;
   tls?: ConnectionOptions;
   maxRetriesPerRequest: null;
   enableReadyCheck: false;
 } {
+  const useLocal = configService.get<string>('REDIS_LOCAL') === 'true';
+
+  if (useLocal) {
+    return {
+      host: 'localhost',
+      port: configService.get<number>('REDIS_PORT') || 6379,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
+  }
+
   const url =
     configService.get<string>('UPSTASH_REDIS_URL') ||
     configService.get<string>('REDIS_URL');
 
   if (!url) {
-    throw new Error(
-      'UPSTASH_REDIS_URL or REDIS_URL is not set in environment variables',
-    );
+    throw new Error('UPSTASH_REDIS_URL or REDIS_URL is not set');
   }
 
   const parsed = new URL(url);
-
   const isTls = parsed.protocol === 'rediss:';
-  const host = parsed.hostname;
-  const port = parseInt(parsed.port || (isTls ? '6379' : '6379'), 10);
-  const password = parsed.password ? decodeURIComponent(parsed.password) : '';
-  const username = parsed.username
-    ? decodeURIComponent(parsed.username)
-    : 'default';
 
   const connection: any = {
-    host,
-    port,
-    password,
-    username,
-    // BullMQ requires maxRetriesPerRequest: null for blocking commands
+    host: parsed.hostname,
+    port: parseInt(parsed.port || '6379', 10),
+    password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+    username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
     maxRetriesPerRequest: null,
-    // Required to avoid ioredis stalling before queue is ready
     enableReadyCheck: false,
   };
 
-  // Only set tls when the URL scheme is rediss:// — passing undefined causes
-  // ioredis to throw in some versions.
   if (isTls) {
     connection.tls = {} as ConnectionOptions;
   }

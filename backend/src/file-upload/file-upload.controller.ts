@@ -98,11 +98,11 @@ export class FileUploadController {
   ) {
     const userId = (req.user as any)._id.toString();
     const providerInput = req.body?.provider as string | undefined;
-    const validProviders = ['ollama', 'claude', 'llamaparse'] as const;
-    const provider: 'ollama' | 'claude' | 'llamaparse' =
+    const validProviders = ['groq', 'ollama', 'claude', 'llamaparse'] as const;
+    const provider: 'groq' | 'ollama' | 'claude' | 'llamaparse' =
       validProviders.includes(providerInput as any)
-        ? (providerInput as 'ollama' | 'claude' | 'llamaparse')
-        : 'ollama';
+        ? (providerInput as 'groq' | 'ollama' | 'claude' | 'llamaparse')
+        : 'groq';
     return this.fileUploadService.uploadResume(file, userId, provider);
   }
 
@@ -126,6 +126,20 @@ export class FileUploadController {
   async reparseResume(@Req() req: Request) {
     const userId = (req.user as any)._id.toString();
     return this.fileUploadService.reparseResume(userId);
+  }
+
+  // ── DELETE /uploads/resume/queue ──────────────────────────────────────────
+
+  @Post('resume/queue/clean')
+  @ApiOperation({
+    summary: 'Clean the resume parse queue',
+    description:
+      'Removes all jobs (completed, failed, delayed, waiting, active) from the resume parse queue. ' +
+      'Useful when the queue is stuck or you want to clear old jobs.',
+  })
+  @ApiResponse({ status: 200, description: 'Queue cleaned successfully' })
+  async cleanQueue() {
+    return this.fileUploadService.cleanQueue();
   }
 
   // ── GET /uploads/resume/proxy ──────────────────────────────────────────────

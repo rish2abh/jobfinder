@@ -12,6 +12,16 @@ export class TriggerBulkSendDto {
   groupIds: string[];
 
   @ApiPropertyOptional({
+    description: 'Optional array of specific contact IDs to send to (filters within groups). If omitted, sends to all contacts in the specified groups.',
+    example: ['665df8d2f98f48bd8f04f2a1', '665df8d2f98f48bd8f04f2a2'],
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  contactIds?: string[];
+
+  @ApiPropertyOptional({
     description: 'Optional custom sender email address',
     example: 'john@example.com',
   })

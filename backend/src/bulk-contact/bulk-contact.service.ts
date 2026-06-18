@@ -54,6 +54,7 @@ export class BulkContactService {
     skippedCount: number;
     duplicateCount: number;
     skipped: { row: number; reason: string }[];
+    contacts: { name: string; email: string; title: string | null; company: string | null }[];
   }> {
     if (!file || !file.buffer) {
       throw new BadRequestException('No file provided');
@@ -72,6 +73,17 @@ export class BulkContactService {
       `Parsed ${parseResult.contacts.length} contacts from file "${file.originalname}" for user ${userId}`,
     );
 
+    // Log a sample of parsed contacts for debugging field extraction
+    if (parseResult.contacts.length > 0) {
+      const sample = parseResult.contacts.slice(0, 3).map((c) => ({
+        name: c.name,
+        email: c.email,
+        title: c.title ?? '(none)',
+        company: c.company ?? '(none)',
+      }));
+      this.logger.log(`Sample parsed contacts: ${JSON.stringify(sample)}`);
+    }
+
     // Store contacts — deduplicate by email per user using bulkWrite for performance
     let storedCount = 0;
     let duplicateCount = 0;
@@ -84,8 +96,8 @@ export class BulkContactService {
             userId: userObjectId,
             name: contact.name,
             email: contact.email.toLowerCase(),
-            title: contact.title || undefined,
-            company: contact.company || undefined,
+            title: contact.title || null,
+            company: contact.company || null,
             sourceFile: file.originalname,
             uploadedAt: new Date(),
           },
@@ -120,8 +132,8 @@ export class BulkContactService {
                   userId: userObjectId,
                   name: contact.name,
                   email: contact.email.toLowerCase(),
-                  title: contact.title || undefined,
-                  company: contact.company || undefined,
+                  title: contact.title || null,
+                  company: contact.company || null,
                   sourceFile: file.originalname,
                   uploadedAt: new Date(),
                 },
@@ -144,20 +156,37 @@ export class BulkContactService {
       skippedCount: parseResult.skipped.length,
       duplicateCount,
       skipped: parseResult.skipped,
+      contacts: parseResult.contacts.slice(0, 50).map((c) => ({
+        name: c.name,
+        email: c.email,
+        title: c.title || null,
+        company: c.company || null,
+      })),
     };
   }
 
   /**
    * Group contacts by title or company for a user.
+   * If contactIds is provided, only group those specific contacts.
    */
   async groupContacts(
     userId: string,
     groupBy: 'title' | 'company',
+    contactIds?: string[],
   ): Promise<ContactGroupDocument[]> {
     const userObjectId = new Types.ObjectId(userId);
 
-    // Fetch all contacts for the user
-    const contacts = await this.bulkContactModel.find({ userId: userObjectId });
+    // Fetch contacts — optionally filtered by specific IDs
+    let contacts: BulkContactDocument[];
+    if (contactIds && contactIds.length > 0) {
+      const objectIds = contactIds.map((id) => new Types.ObjectId(id));
+      contacts = await this.bulkContactModel.find({
+        userId: userObjectId,
+        _id: { $in: objectIds },
+      });
+    } else {
+      contacts = await this.bulkContactModel.find({ userId: userObjectId });
+    }
 
     if (contacts.length === 0) {
       throw new BadRequestException(
@@ -214,6 +243,12 @@ export class BulkContactService {
       bio: profile.bio || undefined,
       skills: profile.skills || [],
       location: profile.location || undefined,
+      experience: profile.experience || [],
+      education: profile.education || [],
+      projects: profile.projects || [],
+      github: profile.github || undefined,
+      linkedin: profile.linkedin || undefined,
+      website: profile.website || undefined,
     };
 
     for (const groupId of groupIds) {
@@ -308,15 +343,22 @@ export class BulkContactService {
   /**
    * Trigger bulk send for specified groups.
    * Enqueues one job per recipient with rate limiting handled at queue level (5/min).
+   * If contactIds is provided, only sends to those specific contacts within the groups.
    */
   async triggerSend(
     userId: string,
     groupIds: string[],
     from?: string,
     resumeUrl?: string,
+    contactIds?: string[],
   ): Promise<{ bulkJobId: string; totalRecipients: number; status: string }> {
     const bulkJobId = new Types.ObjectId().toHexString();
     let totalRecipients = 0;
+
+    // If contactIds provided, create a set for fast lookup
+    const contactFilter = contactIds?.length
+      ? new Set(contactIds)
+      : null;
 
     for (const groupId of groupIds) {
       const groupObjectId = new Types.ObjectId(groupId);
@@ -341,10 +383,23 @@ export class BulkContactService {
         continue;
       }
 
-      // Fetch contacts for the group
-      const contacts = await this.bulkContactModel.find({
+      // Fetch contacts for the group — optionally filtered by contactIds
+      const contactQuery: any = {
         _id: { $in: group.contactIds },
-      });
+      };
+      if (contactFilter) {
+        // Only include contacts that are both in the group AND in the selected filter
+        const filteredIds = group.contactIds.filter((id) =>
+          contactFilter.has(id.toString()),
+        );
+        if (filteredIds.length === 0) {
+          this.logger.log(`Group ${groupId} has no selected contacts, skipping`);
+          continue;
+        }
+        contactQuery._id = { $in: filteredIds };
+      }
+
+      const contacts = await this.bulkContactModel.find(contactQuery);
 
       if (contacts.length === 0) {
         this.logger.warn(`Group ${groupId} has no contacts, skipping`);

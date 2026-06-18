@@ -20,6 +20,9 @@ export class EmailTemplate {
   @Prop({ required: true, enum: ['ai', 'manual'] })
   generatedBy: 'ai' | 'manual';
 
+  @Prop({ enum: ['groq', 'ollama'], default: null })
+  aiProvider: 'groq' | 'ollama' | null;
+
   @Prop({ required: true, default: () => new Date() })
   cachedAt: Date;
 }

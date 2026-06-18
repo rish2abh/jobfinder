@@ -12,6 +12,7 @@ import {
   AlertCircle,
   XCircle,
   Code2,
+  Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -20,6 +21,7 @@ import JsonViewer from '../components/JsonViewer';
 import {
   uploadResume,
   getResumeParseJobStatus,
+  cleanResumeQueue,
   type ResumeParseJobStatus,
   type LlmProvider,
 } from '../services/api';
@@ -45,7 +47,7 @@ export default function Upload() {
   const [cloudinaryUrl, setCloudinaryUrl] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
-  const [provider, setProvider] = useState<LlmProvider>('ollama');
+  const [provider, setProvider] = useState<LlmProvider>('groq');
 
   // ── Poll the parse job ─────────────────────────────────────────────────────
   const jobStatusQuery = useQuery<ResumeParseJobStatus>({
@@ -118,12 +120,27 @@ export default function Upload() {
 
   const isRunning = stage === 'uploading' || stage === 'queued' || stage === 'parsing';
 
+  // ── Clean queue mutation ────────────────────────────────────────────────────
+  const cleanQueueMutation = useMutation({
+    mutationFn: cleanResumeQueue,
+    onSuccess: (data) => {
+      const total = Object.values(data.removed).reduce((a, b) => a + b, 0);
+      toast.success(`Queue cleaned — ${total} job${total !== 1 ? 's' : ''} removed`);
+      setStage('idle');
+      setActiveJobId(null);
+      setIsPolling(false);
+    },
+    onError: () => {
+      toast.error('Failed to clean queue');
+    },
+  });
+
   // ── Status label helpers ───────────────────────────────────────────────────
   const stageLabel: Record<ParseStage, string> = {
     idle:       '',
     uploading:  `Uploading to Cloudinary… ${uploadProgress}%`,
     queued:     'File uploaded — waiting for AI worker…',
-    parsing:    `AI parsing with ${provider === 'claude' ? 'Claude' : provider === 'llamaparse' ? 'LlamaParse' : 'Ollama'}… ${jobData?.progress ?? 0}%`,
+    parsing:    `AI parsing with ${provider === 'groq' ? 'Groq' : provider === 'claude' ? 'Claude' : provider === 'llamaparse' ? 'LlamaParse' : 'Ollama'}… ${jobData?.progress ?? 0}%`,
     completed:  'Parsing complete',
     failed:     'Parsing failed',
   };
@@ -133,11 +150,26 @@ export default function Upload() {
   return (
     <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Upload Resume</h1>
-        <p className="text-gray-500 mt-1">
-          PDF is uploaded instantly. AI parsing runs in the background — you'll see live progress below.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Upload Resume</h1>
+          <p className="text-gray-500 mt-1">
+            PDF is uploaded instantly. AI parsing runs in the background — you'll see live progress below.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => cleanQueueMutation.mutate()}
+          disabled={cleanQueueMutation.isPending}
+          className="btn-secondary text-sm flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+        >
+          {cleanQueueMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Trash2 className="w-4 h-4" />
+          )}
+          Clean Queue
+        </button>
       </div>
 
       {/* Upload card */}
@@ -155,7 +187,21 @@ export default function Upload() {
         {/* Provider selector */}
         <div>
           <label className="text-sm font-medium text-gray-700 mb-2 block">AI Provider</label>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setProvider('groq')}
+              disabled={isRunning}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                provider === 'groq'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <span className="text-lg">⚡</span>
+              Groq
+              <span className="text-xs text-gray-400 font-normal">(Fast)</span>
+            </button>
             <button
               type="button"
               onClick={() => setProvider('ollama')}
@@ -200,7 +246,9 @@ export default function Upload() {
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-1.5">
-            {provider === 'ollama'
+            {provider === 'groq'
+              ? 'Ultra-fast cloud inference via Groq — requires GROQ_API_KEY in backend .env.'
+              : provider === 'ollama'
               ? 'Runs locally on your machine — requires Ollama to be running.'
               : provider === 'claude'
               ? 'Uses Anthropic Claude API — requires CLAUDE_API_KEY in backend .env.'
@@ -243,7 +291,7 @@ export default function Upload() {
         {[
           { step: '1', title: 'Upload PDF',       desc: 'Stored securely on Cloudinary',         color: 'bg-blue-500',   done: stage !== 'idle' && stage !== 'uploading' },
           { step: '2', title: 'Text Extraction',  desc: 'pdf-parse reads the raw PDF text',       color: 'bg-purple-500', done: stage === 'parsing' || stage === 'completed' || stage === 'failed' },
-          { step: '3', title: 'AI Parsing',        desc: `${provider === 'claude' ? 'Claude' : provider === 'llamaparse' ? 'LlamaParse' : 'Ollama'} structures it into clean JSON`,  color: 'bg-green-500',  done: stage === 'completed' },
+          { step: '3', title: 'AI Parsing',        desc: `${provider === 'groq' ? 'Groq' : provider === 'claude' ? 'Claude' : provider === 'llamaparse' ? 'LlamaParse' : 'Ollama'} structures it into clean JSON`,  color: 'bg-green-500',  done: stage === 'completed' },
         ].map(({ step, title, desc, color, done }) => (
           <div key={step} className={`card p-4 text-center transition-all ${done ? 'ring-2 ring-green-400' : ''}`}>
             <div className={`w-8 h-8 ${done ? 'bg-green-500' : color} rounded-full flex items-center justify-center text-white text-sm font-bold mx-auto mb-2 transition-colors`}>
@@ -285,7 +333,9 @@ export default function Upload() {
                   />
                 </div>
                 <p className="text-xs text-gray-400">
-                  {provider === 'claude'
+                  {provider === 'groq'
+                    ? 'Groq typically responds in 2–5 seconds — ultra-fast inference.'
+                    : provider === 'claude'
                     ? 'Claude typically responds in 5–15 seconds.'
                     : provider === 'llamaparse'
                     ? 'LlamaParse processes PDFs in 10–30 seconds for best structural extraction.'

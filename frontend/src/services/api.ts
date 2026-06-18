@@ -201,7 +201,7 @@ export const extractProfileFromResume = (_id?: string) =>
 
 // ── Uploads ────────────────────────────────────────────────────────────────
 
-export type LlmProvider = 'ollama' | 'claude' | 'llamaparse';
+export type LlmProvider = 'groq' | 'ollama' | 'claude' | 'llamaparse';
 
 export interface UploadResumePayload {
   userId?: string;
@@ -478,6 +478,19 @@ export interface UploadEnqueueResult {
 export const getResumeParseJobStatus = (jobId: string) =>
   api.get<ResumeParseJobStatus>(`/uploads/resume/status/${jobId}`).then((r) => r.data);
 
+export interface CleanQueueResult {
+  removed: {
+    completed: number;
+    failed: number;
+    delayed: number;
+    waiting: number;
+    active: number;
+  };
+}
+
+export const cleanResumeQueue = () =>
+  api.post<CleanQueueResult>('/uploads/resume/queue/clean').then((r) => r.data);
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 export interface LoginPayload {
@@ -596,6 +609,7 @@ export interface ContactUploadResult {
   skippedCount: number;
   duplicateCount: number;
   skipped: Array<{ row: number; reason: string }>;
+  contacts?: Array<{ name: string; email: string; title: string | null; company: string | null }>;
 }
 
 export interface ContactGroup {
@@ -615,6 +629,7 @@ export interface EmailTemplate {
   subject: string;
   body: string;
   generatedBy: string;
+  aiProvider?: 'groq' | 'ollama' | null;
   cachedAt: string;
 }
 
@@ -642,8 +657,8 @@ export const uploadContacts = (file: File) => {
   }).then((r) => r.data);
 };
 
-export const groupContacts = (groupBy: 'title' | 'company') =>
-  api.post<ContactGroup[]>('/contacts/group', { groupBy }).then((r) => r.data);
+export const groupContacts = (groupBy: 'title' | 'company', contactIds?: string[]) =>
+  api.post<ContactGroup[]>('/contacts/group', { groupBy, ...(contactIds?.length ? { contactIds } : {}) }).then((r) => r.data);
 
 export interface BulkContact {
   _id: string;
@@ -670,8 +685,13 @@ export const generateTemplates = (groupIds: string[], userPrompt?: string) =>
 export const editTemplate = (groupId: string, subject: string, body: string) =>
   api.patch<EmailTemplate>(`/contacts/templates/${groupId}`, { subject, body }).then((r) => r.data);
 
-export const triggerBulkSend = (groupIds: string[], from?: string, resumeUrl?: string) =>
-  api.post<BulkSendResult>('/contacts/send', { groupIds, from, resumeUrl }).then((r) => r.data);
+export const triggerBulkSend = (groupIds: string[], from?: string, resumeUrl?: string, contactIds?: string[]) =>
+  api.post<BulkSendResult>('/contacts/send', {
+    groupIds,
+    ...(from ? { from } : {}),
+    ...(resumeUrl ? { resumeUrl } : {}),
+    ...(contactIds?.length ? { contactIds } : {}),
+  }).then((r) => r.data);
 
 export const getBulkSendStatus = (jobId: string) =>
   api.get<BulkSendStatus>(`/contacts/send/status/${jobId}`).then((r) => r.data);

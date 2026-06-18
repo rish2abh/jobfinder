@@ -18,4 +18,13 @@ export class GenerateTemplatesDto {
   @IsOptional()
   @IsString()
   userPrompt?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional array of specific contact IDs (unused, accepted for forward-compat)',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  contactIds?: string[];
 }

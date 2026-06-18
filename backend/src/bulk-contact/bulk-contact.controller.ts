@@ -141,7 +141,7 @@ export class BulkContactController {
   @ApiResponse({ status: 400, description: 'No contacts found for user' })
   async groupContacts(@Req() req: Request, @Body() dto: GroupContactsDto) {
     const userId = (req.user as any).sub ?? (req.user as any)._id?.toString();
-    return this.bulkContactService.groupContacts(userId, dto.groupBy);
+    return this.bulkContactService.groupContacts(userId, dto.groupBy, dto.contactIds);
   }
 
   // ── GET /contacts/groups ────────────────────────────────────────────────
@@ -166,7 +166,7 @@ export class BulkContactController {
   @ApiOperation({
     summary: 'Generate AI email templates per group',
     description:
-      'Generates personalized email templates for specified groups using AI (Ollama). ' +
+      'Generates personalized email templates for specified groups using AI (Groq primary, Ollama fallback). ' +
       'Returns cached templates if already generated. Falls back to manual input on AI failure.',
   })
   @ApiResponse({
@@ -261,6 +261,7 @@ export class BulkContactController {
       dto.groupIds,
       dto.from,
       dto.resumeUrl,
+      dto.contactIds,
     );
   }
 

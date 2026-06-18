@@ -64,7 +64,7 @@ export class FileUploadService {
   async uploadResume(
     file: Express.Multer.File,
     userId: string,
-    provider: LlmProvider = 'ollama',
+    provider: LlmProvider = 'groq',
   ): Promise<{ jobId: string; status: 'queued'; cloudinaryUrl: string }> {
     // Verify user exists before doing any work
     await this.usersService.findById(userId);
@@ -226,6 +226,41 @@ export class FileUploadService {
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Clean all jobs from the resume parse queue.
+   */
+  async cleanQueue(): Promise<{
+    removed: { completed: number; failed: number; delayed: number; waiting: number; active: number };
+  }> {
+    this.logger.log('Cleaning resume parse queue — removing all jobs');
+
+    const [completed, failed, delayed, waiting, active] = await Promise.all([
+      this.resumeQueue.clean(0, 0, 'completed'),
+      this.resumeQueue.clean(0, 0, 'failed'),
+      this.resumeQueue.clean(0, 0, 'delayed'),
+      this.resumeQueue.clean(0, 0, 'wait'),
+      this.resumeQueue.clean(0, 0, 'active'),
+    ]);
+
+    // Also drain any waiting jobs
+    await this.resumeQueue.drain();
+
+    const result = {
+      removed: {
+        completed: completed.length,
+        failed: failed.length,
+        delayed: delayed.length,
+        waiting: waiting.length,
+        active: active.length,
+      },
+    };
+
+    this.logger.log(`Queue cleaned: ${JSON.stringify(result.removed)}`);
+    return result;
+  }
+
+  // ── Private helper methods ──────────────────────────────────────────────
 
   private async uploadFileToCloudinary(file: Express.Multer.File) {
     const startTime = Date.now();

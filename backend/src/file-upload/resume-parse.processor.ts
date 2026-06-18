@@ -6,6 +6,7 @@ import { UsersService } from '../users/users.service';
 import { MatchingService } from '../matching/matching.service';
 import { parseResumeWithOllama } from './ollama.helper';
 import { parseResumeWithClaude } from './claude.helper';
+import { parseResumeWithGroq } from './groq.helper';
 import { parseResumeWithLlamaParse } from './llamaparse.helper';
 import { WinstonLoggerService } from '../logger/winston-logger.service';
 import {
@@ -24,6 +25,8 @@ export class ResumeParseProcessor extends WorkerHost {
   private readonly ollamaModel: string;
   private readonly claudeApiKey: string;
   private readonly claudeModel: string;
+  private readonly groqApiKey: string;
+  private readonly groqModel: string;
   private readonly llamaparseApiKey: string;
 
   constructor(
@@ -39,6 +42,8 @@ export class ResumeParseProcessor extends WorkerHost {
     this.ollamaModel = this.configService.get<string>('OLLAMA_MODEL') ?? 'mistral';
     this.claudeApiKey = this.configService.get<string>('CLAUDE_API_KEY') ?? '';
     this.claudeModel = this.configService.get<string>('CLAUDE_MODEL') ?? 'claude-sonnet-4-20250514';
+    this.groqApiKey = this.configService.get<string>('GROQ_API_KEY') ?? '';
+    this.groqModel = this.configService.get<string>('GROQ_MODEL') ?? 'llama-3.3-70b-versatile';
     this.llamaparseApiKey = this.configService.get<string>('LLAMAPARSE_API_KEY') ?? '';
   }
 
@@ -51,7 +56,7 @@ export class ResumeParseProcessor extends WorkerHost {
 
     const { userId, cloudinaryUrl, cloudinaryId, rawText, provider } = job.data;
     const startTime = Date.now();
-    const selectedProvider = provider || 'ollama';
+    const selectedProvider = provider || 'groq';
 
     this.logger.info('Job started', {
       context: this.context,
@@ -77,7 +82,14 @@ export class ResumeParseProcessor extends WorkerHost {
       let parsedJson: Record<string, unknown>;
       let llmAttempts: number;
 
-      if (selectedProvider === 'claude') {
+      if (selectedProvider === 'groq') {
+        if (!this.groqApiKey) {
+          throw new Error('GROQ_API_KEY environment variable is not configured');
+        }
+        const result = await parseResumeWithGroq(rawText, this.groqApiKey, this.groqModel);
+        parsedJson = result.parsedJson;
+        llmAttempts = result.llmAttempts;
+      } else if (selectedProvider === 'claude') {
         if (!this.claudeApiKey) {
           throw new Error('CLAUDE_API_KEY environment variable is not configured');
         }

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Upload,
@@ -14,6 +14,8 @@ import {
   RefreshCw,
   CheckSquare,
   Square,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useUserStore } from '../store/userStore';
@@ -93,6 +95,15 @@ export default function ContactsPage() {
 
   const allContacts = contactsQuery.data ?? [];
 
+  // ── Pagination for contacts table ──────────────────────────────────────────
+  const [contactPage, setContactPage] = useState(1);
+  const CONTACTS_PER_PAGE = 50;
+  const totalContactPages = Math.ceil(allContacts.length / CONTACTS_PER_PAGE);
+  const paginatedContacts = allContacts.slice(
+    (contactPage - 1) * CONTACTS_PER_PAGE,
+    contactPage * CONTACTS_PER_PAGE,
+  );
+
   // ── File Upload ───────────────────────────────────────────────────────────
 
   const uploadMutation = useMutation({
@@ -140,7 +151,10 @@ export default function ContactsPage() {
   // ── Grouping ──────────────────────────────────────────────────────────────
 
   const groupMutation = useMutation({
-    mutationFn: (mode: 'title' | 'company') => groupContacts(mode),
+    mutationFn: (mode: 'title' | 'company') => {
+      const ids = selectedContactIds.size > 0 ? Array.from(selectedContactIds) : undefined;
+      return groupContacts(mode, ids);
+    },
     onSuccess: (data) => {
       setGroups(data);
       queryClient.invalidateQueries({ queryKey: ['contactGroups'] });
@@ -206,8 +220,33 @@ export default function ContactsPage() {
 
   // ── Bulk Send ─────────────────────────────────────────────────────────────
 
+  // Track which contacts are selected for sending (approve step)
+  const [sendContactIds, setSendContactIds] = useState<Set<string>>(new Set());
+
+  // Initialize sendContactIds when entering approve step — select all by default
+  const initSendContacts = () => {
+    const allIds = new Set<string>();
+    groups.forEach((g) => g.contactIds.forEach((id) => allIds.add(id)));
+    setSendContactIds(allIds);
+  };
+
+  // Auto-initialize when step changes to approve
+  useEffect(() => {
+    if (step === 'approve') {
+      initSendContacts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   const sendMutation = useMutation({
-    mutationFn: () => triggerBulkSend(groups.map((g) => g._id)),
+    mutationFn: () => {
+      const selectedIds = sendContactIds.size > 0 ? Array.from(sendContactIds) : undefined;
+      // Only send groups that have at least one selected contact
+      const activeGroupIds = groups
+        .filter((g) => g.contactIds.some((id) => sendContactIds.has(id)))
+        .map((g) => g._id);
+      return triggerBulkSend(activeGroupIds, undefined, undefined, selectedIds);
+    },
     onSuccess: (data) => {
       setBulkJobId(data.bulkJobId);
       setSendStatus({
@@ -247,6 +286,7 @@ export default function ContactsPage() {
     setUploadResult(null);
     setGroups([]);
     setSelectedContactIds(new Set());
+    setSendContactIds(new Set());
     setTemplates({});
     setBulkJobId(null);
     setSendStatus(null);
@@ -361,7 +401,7 @@ export default function ContactsPage() {
 
       {/* Upload Result Summary */}
       {uploadResult && step !== 'upload' && (
-        <div className="card p-4">
+        <div className="card p-4 space-y-3">
           <div className="flex items-center gap-4 flex-wrap text-sm">
             <span className="flex items-center gap-1.5 text-green-700">
               <CheckCircle2 className="w-4 h-4" />
@@ -379,8 +419,40 @@ export default function ContactsPage() {
               </span>
             )}
           </div>
+
+          {/* Parsed contacts preview */}
+          {uploadResult.contacts && uploadResult.contacts.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xs text-primary-600 cursor-pointer hover:underline font-medium">
+                Preview extracted data ({uploadResult.contacts.length}{uploadResult.totalParsed > 50 ? ` of ${uploadResult.totalParsed}` : ''})
+              </summary>
+              <div className="mt-2 overflow-x-auto border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Name</th>
+                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Email</th>
+                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Title</th>
+                      <th className="px-2 py-1.5 text-left font-medium text-gray-600">Company</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {uploadResult.contacts.map((c, i) => (
+                      <tr key={i}>
+                        <td className="px-2 py-1 text-gray-900">{c.name}</td>
+                        <td className="px-2 py-1 text-gray-600">{c.email}</td>
+                        <td className="px-2 py-1 text-gray-500">{c.title || '—'}</td>
+                        <td className="px-2 py-1 text-gray-500">{c.company || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+
           {uploadResult.skipped.length > 0 && (
-            <details className="mt-3">
+            <details>
               <summary className="text-xs text-amber-600 cursor-pointer hover:underline">
                 View skipped records ({uploadResult.skipped.length})
               </summary>
@@ -431,9 +503,9 @@ export default function ContactsPage() {
                 </p>
               )}
 
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <div className="overflow-x-auto border border-gray-200 rounded-lg max-h-[28rem] overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                     <tr>
                       <th className="px-3 py-2 text-left w-10"></th>
                       <th className="px-3 py-2 text-left font-medium text-gray-600">Name</th>
@@ -444,7 +516,7 @@ export default function ContactsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {allContacts.map((contact) => (
+                    {paginatedContacts.map((contact) => (
                       <tr
                         key={contact._id}
                         onClick={() => {
@@ -478,6 +550,38 @@ export default function ContactsPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {totalContactPages > 1 && (
+                <div className="flex items-center justify-between pt-3">
+                  <p className="text-xs text-gray-500">
+                    Showing {(contactPage - 1) * CONTACTS_PER_PAGE + 1}–
+                    {Math.min(contactPage * CONTACTS_PER_PAGE, allContacts.length)} of{' '}
+                    {allContacts.length} contacts
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setContactPage((p) => Math.max(1, p - 1))}
+                      disabled={contactPage === 1}
+                      className="p-1.5 rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs text-gray-600 px-2">
+                      Page {contactPage} of {totalContactPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setContactPage((p) => Math.min(totalContactPages, p + 1))}
+                      disabled={contactPage === totalContactPages}
+                      className="p-1.5 rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -558,7 +662,7 @@ export default function ContactsPage() {
                   className="btn-primary text-sm flex items-center gap-1.5"
                 >
                   {templateMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Generate with AI
+                  ⚡ Generate with AI
                 </button>
               </div>
             </div>
@@ -589,7 +693,9 @@ export default function ContactsPage() {
                       </p>
                       <p className="text-xs text-gray-500 mt-1 line-clamp-2">{t.body}</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        {t.generatedBy === 'ai' ? '🤖 AI generated' : '✍️ Manual'} • {t.cachedAt ? new Date(t.cachedAt).toLocaleDateString() : ''}
+                        {t.generatedBy === 'ai'
+                          ? `🤖 AI generated${t.aiProvider ? ` (${t.aiProvider === 'groq' ? 'Groq' : 'Ollama'})` : ''}`
+                          : '✍️ Manual'} • {t.cachedAt ? new Date(t.cachedAt).toLocaleDateString() : ''}
                       </p>
                     </button>
                   ))}
@@ -641,20 +747,85 @@ export default function ContactsPage() {
                           {group.groupValue}
                         </h3>
                         <p className="text-xs text-gray-400">
-                          {group.contactIds.length} recipient{group.contactIds.length !== 1 ? 's' : ''} • {group.groupType}
+                          {group.contactIds.filter((id) => sendContactIds.has(id)).length}/{group.contactIds.length} recipient{group.contactIds.length !== 1 ? 's' : ''} selected • {group.groupType}
+                          {template?.generatedBy === 'ai' && template.aiProvider && (
+                            <span className="ml-2 inline-flex items-center gap-0.5 bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                              ⚡ {template.aiProvider === 'groq' ? 'Groq' : 'Ollama'}
+                            </span>
+                          )}
                         </p>
                       </div>
-                      {!isEditing && (
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => startEdit(group._id)}
-                          className="btn-secondary text-xs flex items-center gap-1"
+                          onClick={() => {
+                            const groupSelected = group.contactIds.every((id) => sendContactIds.has(id));
+                            setSendContactIds((prev) => {
+                              const next = new Set(prev);
+                              group.contactIds.forEach((id) => {
+                                if (groupSelected) next.delete(id);
+                                else next.add(id);
+                              });
+                              return next;
+                            });
+                          }}
+                          className="btn-secondary text-[10px] px-2 py-1 flex items-center gap-1"
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          Edit
+                          {group.contactIds.every((id) => sendContactIds.has(id)) ? (
+                            <><CheckSquare className="w-3 h-3" /> All</>
+                          ) : (
+                            <><Square className="w-3 h-3" /> All</>
+                          )}
                         </button>
-                      )}
+                        {!isEditing && (
+                          <button
+                            type="button"
+                            onClick={() => startEdit(group._id)}
+                            className="btn-secondary text-xs flex items-center gap-1"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Recipient selection list */}
+                    {allContacts.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                        {group.contactIds.map((contactId) => {
+                          const contact = allContacts.find((c) => c._id === contactId);
+                          if (!contact) return null;
+                          const isSelected = sendContactIds.has(contactId);
+                          return (
+                            <button
+                              key={contactId}
+                              type="button"
+                              onClick={() => {
+                                setSendContactIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (isSelected) next.delete(contactId);
+                                  else next.add(contactId);
+                                  return next;
+                                });
+                              }}
+                              className={`inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-1 transition-colors ${
+                                isSelected
+                                  ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                                  : 'bg-gray-100 text-gray-400 border border-gray-200 line-through'
+                              }`}
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-3 h-3" />
+                              ) : (
+                                <Square className="w-3 h-3" />
+                              )}
+                              {contact.name || contact.email}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {template && !isEditing && (
                       <div className="bg-gray-50 rounded-lg p-3 space-y-2">
@@ -721,26 +892,47 @@ export default function ContactsPage() {
               })}
             </div>
 
-            {/* Send All button */}
+            {/* Send section */}
             <div className="pt-4 border-t border-gray-200">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="text-sm text-gray-600">
-                  <strong>{groups.length}</strong> group{groups.length !== 1 ? 's' : ''} •{' '}
-                  <strong>{groups.reduce((sum, g) => sum + g.contactIds.length, 0)}</strong> total recipients
+                  <strong>{sendContactIds.size}</strong> of{' '}
+                  <strong>{groups.reduce((sum, g) => sum + g.contactIds.length, 0)}</strong> recipients selected •{' '}
+                  <strong>{groups.length}</strong> group{groups.length !== 1 ? 's' : ''}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => sendMutation.mutate()}
-                  disabled={sendMutation.isPending}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  {sendMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  Send All
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = new Set<string>();
+                      groups.forEach((g) => g.contactIds.forEach((id) => allIds.add(id)));
+                      setSendContactIds(allIds);
+                    }}
+                    className="btn-secondary text-xs"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendContactIds(new Set())}
+                    className="btn-secondary text-xs"
+                  >
+                    Deselect All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendMutation.mutate()}
+                    disabled={sendMutation.isPending || sendContactIds.size === 0}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {sendMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    Send to {sendContactIds.size} Selected
+                  </button>
+                </div>
               </div>
             </div>
           </div>
