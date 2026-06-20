@@ -108,7 +108,7 @@ async function main() {
       }],
     }];
 
-    const messages = [
+    const messages: Array<{ role: string; parts: any[] }> = [
       { role: 'user', parts: [{ text: 'Find React developer jobs for me' }] },
     ];
 

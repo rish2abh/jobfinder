@@ -30,6 +30,7 @@ export interface GeminiResponse {
   toolCalls: GeminiToolCall[];
   finishReason: string;
   usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number; totalTokenCount: number };
+   rawParts: any[];
 }
 
 /**
@@ -51,7 +52,7 @@ export class GeminiClientService implements OnModuleInit {
 
   onModuleInit() {
     this.apiKey = this.configService.get<string>('GEMINI_API_KEY', '');
-    this.model = this.configService.get<string>('GEMINI_ORCHESTRATOR_MODEL', 'gemini-2.5-flash');
+    this.model = this.configService.get<string>('GEMINI_ORCHESTRATOR_MODEL', 'gemini-3.5-flash');
 
     if (!this.apiKey) {
       this.logger.warn('GEMINI_API_KEY not set — agent will not function');
@@ -135,7 +136,7 @@ export class GeminiClientService implements OnModuleInit {
         `tokens: ${usageMetadata?.totalTokenCount ?? 'N/A'}`,
       );
 
-      return { text, toolCalls, finishReason, usageMetadata };
+      return { text, toolCalls, finishReason, usageMetadata  , rawParts: content?.parts ?? []};
     } catch (err: any) {
       const elapsed = Date.now() - startTime;
       const status = err?.response?.status;

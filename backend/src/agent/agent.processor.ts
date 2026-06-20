@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { GeminiClientService, GeminiMessage, GeminiToolCall, GeminiFunctionDeclaration } from './gemini-client.service';
 import { ToolRegistry } from './tools/tool-registry';
-import { AgentJournalRepository } from './journal/agent-journal.repository';
+import { AgentJournalRepository } from "./journal/agent-journal.repository";
 import { GuardrailService } from './guardrails/guardrail.service';
 import { SYSTEM_PROMPT } from './system-prompt';
 import {
@@ -91,7 +91,7 @@ export class AgentProcessor extends WorkerHost {
           break;
         }
 
-        // Build model message with function calls
+    // Build model message with function calls
         const modelParts: GeminiMessage['parts'] = [];
         for (const tc of geminiResponse.toolCalls) {
           modelParts.push({ functionCall: tc });
@@ -99,7 +99,7 @@ export class AgentProcessor extends WorkerHost {
         if (geminiResponse.text) {
           modelParts.push({ text: geminiResponse.text });
         }
-        messages.push({ role: 'model', parts: modelParts });
+        messages.push({ role: 'model', parts: geminiResponse.rawParts });
 
         // Execute tool calls and build response parts
         const functionResponseParts: GeminiMessage['parts'] = [];
