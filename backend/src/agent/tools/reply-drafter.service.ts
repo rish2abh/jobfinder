@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AgentTool } from './tool-registry';
 import { GeminiFunctionDeclaration } from '../gemini-client.service';
 import { DraftRepository } from '../drafts/draft.repository';
+import { isValidEmail, validateTemplateOutput } from '../shared';
 
 /**
  * Drafts follow-up or reply emails for recruiter conversations.
@@ -65,11 +66,25 @@ export class ReplyDrafterService implements AgentTool {
     const context = (args.context as string) || '';
     const tone = (args.tone as string) || 'professional';
 
+    if (!isValidEmail(recipientEmail)) {
+      this.logger.warn(`Invalid recipientEmail: ${recipientEmail}`);
+      return {
+        status: 'error',
+        message: `Invalid recipient email "${recipientEmail}". Must be a valid email address (user@domain.tld).`,
+      };
+    }
+
     // Build subject and body from context
     const subject = originalSubject
       ? `Re: ${originalSubject}`.slice(0, 200)
       : 'Follow up'.slice(0, 200);
     const body = context.slice(0, 2000) || `Hi ${recipientName || 'there'}, following up on our conversation.`;
+
+    const check = validateTemplateOutput({ subject, body });
+    if (!check.valid) {
+      this.logger.warn(`Draft failed validation: ${check.errors.join('; ')}`);
+      return { status: 'error', message: `Draft failed validation: ${check.errors.join('; ')}` };
+    }
 
     const draft = await this.draftRepo.create({
       userId,

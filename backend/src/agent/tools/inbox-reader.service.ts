@@ -7,6 +7,7 @@ import { GeminiFunctionDeclaration, GeminiClientService } from '../gemini-client
 import { DraftRepository } from '../drafts/draft.repository';
 import { ProcessedThreadRepository } from './processed-thread.repository';
 import { MailService } from '../../mail/mail.service';
+import { isValidEmail, validateTemplateOutput } from '../shared';
 
 interface ParsedMessage {
   uid: number;
@@ -195,7 +196,7 @@ export class InboxReaderService implements AgentTool {
         messages.push({
           uid,
           threadId: `${userId}:${uid}`,
-          from: parsed.from?.text || 'unknown',
+          from: parsed.from?.value?.[0]?.address || parsed.from?.text || 'unknown',
           subject: parsed.subject || '(no subject)',
           date: parsed.date || null,
           textBody: (parsed.text || '').slice(0, 2000),
@@ -326,6 +327,17 @@ export class InboxReaderService implements AgentTool {
 
     if (!parsed?.subject || !parsed?.body) {
       this.logger.warn(`Failed to generate reply for UID ${msg.uid}`);
+      return undefined;
+    }
+
+    if (!isValidEmail(msg.from)) {
+      this.logger.warn(`Skipping reply draft — invalid sender address: "${msg.from}"`);
+      return undefined;
+    }
+
+    const check = validateTemplateOutput({ subject: parsed.subject, body: parsed.body });
+    if (!check.valid) {
+      this.logger.warn(`Skipping reply draft — validation failed: ${check.errors.join('; ')}`);
       return undefined;
     }
 

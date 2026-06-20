@@ -98,8 +98,7 @@ export class DraftsController {
       );
     }
 
-    await this.draftRepo.update(id, { status: 'approved' });
-
+    // Enqueue first — only mark approved if the job is successfully queued
     await this.mailQueue.add(
       AGENT_MAIL_JOB,
       {
@@ -116,6 +115,8 @@ export class DraftsController {
         removeOnFail: { age: 60 * 60 * 24 * 3 },
       },
     );
+
+    await this.draftRepo.update(id, { status: 'approved' });
 
     return { status: 'approved', draftId: id };
   }
