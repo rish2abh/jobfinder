@@ -14,8 +14,14 @@ async function bootstrap() {
   const logger = app.get(WinstonLoggerService);
   app.useLogger(logger);
 
+  const corsOrigins: string[] = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  const chromeExtensionId = process.env.CHROME_EXTENSION_ID;
+  if (chromeExtensionId) {
+    corsOrigins.push(`chrome-extension://${chromeExtensionId}`);
+  }
+
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
     credentials: true,

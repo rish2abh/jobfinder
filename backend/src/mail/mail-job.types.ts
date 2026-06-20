@@ -55,3 +55,26 @@ export interface TemplateMailJobResult {
   status: 'sent' | 'failed';
   failureReason?: string;
 }
+
+/**
+ * Job type for sending an approved agent draft (cold outreach or reply).
+ * Unlike TEMPLATE_MAIL_JOB, this does NOT require a groupId — the result
+ * is written back to the draft document instead of mailResultModel.
+ */
+export const AGENT_MAIL_JOB = 'send-agent-email';
+
+export interface AgentMailJobData {
+  draftId: string;
+  userId: string;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  resumeUrl?: string;
+}
+
+export interface AgentMailJobResult {
+  draftId: string;
+  recipientEmail: string;
+  status: 'sent' | 'failed';
+  failureReason?: string;
+}

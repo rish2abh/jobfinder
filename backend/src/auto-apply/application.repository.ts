@@ -70,6 +70,16 @@ export class ApplicationRepository {
     return this.model.countDocuments(filter).exec();
   }
 
+  /**
+   * Count applications created by a user since a given date.
+   * Used by the agent's daily cap guardrail to enforce limits.
+   */
+  async countByUserSince(userId: string, since: Date): Promise<number> {
+    return this.model
+      .countDocuments({ userId, createdAt: { $gte: since } })
+      .exec();
+  }
+
   async getStats(userId: string): Promise<Record<ApplicationStatus, number>> {
     const results = await this.model
       .aggregate([

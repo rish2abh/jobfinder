@@ -13,6 +13,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { MatchingModule } from './matching/matching.module';
 import { AutoApplyModule } from './auto-apply/auto-apply.module';
 import { BulkContactModule } from './bulk-contact/bulk-contact.module';
+import { AgentModule } from './agent/agent.module';
 import { buildRedisConnection } from './mail/bull-redis.config';
 
 @Module({
@@ -36,6 +37,7 @@ import { buildRedisConnection } from './mail/bull-redis.config';
     MatchingModule,
     AutoApplyModule,
     BulkContactModule,
+    AgentModule,
     LoggerModule,
   ],
   controllers: [AppController],

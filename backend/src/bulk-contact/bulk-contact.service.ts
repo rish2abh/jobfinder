@@ -208,6 +208,21 @@ export class BulkContactService {
   }
 
   /**
+   * Get a single contact by ID, scoped to the user.
+   */
+  async getContactById(userId: string, contactId: string): Promise<BulkContactDocument> {
+    const userObjectId = new Types.ObjectId(userId);
+    const contact = await this.bulkContactModel.findOne({
+      _id: new Types.ObjectId(contactId),
+      userId: userObjectId,
+    });
+    if (!contact) {
+      throw new NotFoundException(`Contact ${contactId} not found`);
+    }
+    return contact;
+  }
+
+  /**
    * Get all contacts for a user.
    */
   async getContacts(userId: string): Promise<BulkContactDocument[]> {

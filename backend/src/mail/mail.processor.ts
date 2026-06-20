@@ -13,11 +13,15 @@ import {
   MAIL_JOB,
   MAIL_QUEUE,
   TEMPLATE_MAIL_JOB,
+  AGENT_MAIL_JOB,
   BulkMailJobData,
   BulkMailJobResult,
   TemplateMailJobData,
   TemplateMailJobResult,
+  AgentMailJobData,
+  AgentMailJobResult,
 } from './mail-job.types';
+import { Draft } from '../agent/drafts/draft.schema';
 
 @Processor(MAIL_QUEUE)
 export class MailProcessor extends WorkerHost {
@@ -30,6 +34,8 @@ export class MailProcessor extends WorkerHost {
     private readonly mailFromService: MailFromService,
     @InjectModel(MailResult.name)
     private readonly mailResultModel: Model<MailResultDocument>,
+    @InjectModel(Draft.name)
+    private readonly draftModel: Model<Draft>,
     private readonly logger: WinstonLoggerService,
   ) {
     super();
@@ -68,10 +74,10 @@ export class MailProcessor extends WorkerHost {
 
   async process(
     job: Job<
-      BulkMailJobData | TemplateMailJobData,
-      BulkMailJobResult | TemplateMailJobResult
+      BulkMailJobData | TemplateMailJobData | AgentMailJobData,
+      BulkMailJobResult | TemplateMailJobResult | AgentMailJobResult
     >,
-  ): Promise<BulkMailJobResult | TemplateMailJobResult> {
+  ): Promise<BulkMailJobResult | TemplateMailJobResult | AgentMailJobResult> {
     const userId = (job.data as any).userId;
 
     this.logger.info('Job started', {
@@ -85,11 +91,15 @@ export class MailProcessor extends WorkerHost {
     const startTime = Date.now();
 
     try {
-      let result: BulkMailJobResult | TemplateMailJobResult;
+      let result: BulkMailJobResult | TemplateMailJobResult | AgentMailJobResult;
 
       if (job.name === TEMPLATE_MAIL_JOB) {
         result = await this.processTemplateEmail(
           job as Job<TemplateMailJobData, TemplateMailJobResult>,
+        );
+      } else if (job.name === AGENT_MAIL_JOB) {
+        result = await this.processAgentEmail(
+          job as Job<AgentMailJobData, AgentMailJobResult>,
         );
       } else if (job.name === MAIL_JOB) {
         result = await this.processBulkMail(
@@ -228,6 +238,78 @@ export class MailProcessor extends WorkerHost {
         status: 'failed',
         failureReason,
       };
+    }
+  }
+
+  // ── Agent email handler (no groupId required) ──────────────────────────
+
+  private async processAgentEmail(
+    job: Job<AgentMailJobData, AgentMailJobResult>,
+  ): Promise<AgentMailJobResult> {
+    const { userId, draftId, recipientEmail, subject, body, resumeUrl } = job.data;
+
+    this.logger.info('Job progress: sending agent draft email', {
+      context: this.context,
+      jobId: job.id,
+      userId,
+      queue: MAIL_QUEUE,
+      draftId,
+      recipientEmail,
+    });
+
+    const startTime = Date.now();
+    try {
+      const from = await this.resolveSenderAddress();
+      const transporter = this.getTransporter();
+
+      // Optional resume attachment (non-fatal if it fails)
+      let attachment: { filename: string; content: Buffer; contentType: string } | null = null;
+      try {
+        attachment = await this.resolveTemplateAttachment(userId, resumeUrl);
+      } catch (attachErr: any) {
+        this.logger.warn(
+          `[SMTP] Agent draft attachment fetch failed for ${recipientEmail}, sending without: ${attachErr.message}`,
+          this.context,
+        );
+      }
+
+      await transporter.sendMail({
+        from,
+        to: recipientEmail.trim().toLowerCase(),
+        subject,
+        html: body,
+        attachments: attachment ? [attachment] : [],
+      });
+
+      const elapsed = Date.now() - startTime;
+      this.logger.log(
+        `[SMTP] agentEmail — success — elapsed: ${elapsed}ms, to: ${recipientEmail}`,
+        this.context,
+      );
+
+      // Mark draft as sent
+      await this.draftModel.findByIdAndUpdate(draftId, {
+        status: 'sent',
+      });
+
+      return { draftId, recipientEmail, status: 'sent' };
+    } catch (error) {
+      const elapsed = Date.now() - startTime;
+      const failureReason = error?.message || 'Unknown error';
+
+      this.logger.error(
+        `[SMTP] agentEmail — failed — elapsed: ${elapsed}ms, to: ${recipientEmail}, error: ${failureReason}`,
+        error?.stack,
+        this.context,
+      );
+
+      // Mark draft as failed with reason
+      await this.draftModel.findByIdAndUpdate(draftId, {
+        status: 'failed',
+        failureReason,
+      });
+
+      return { draftId, recipientEmail, status: 'failed', failureReason };
     }
   }
 

@@ -10,6 +10,7 @@ import { MailProcessor } from './mail.processor';
 import { MailFromService } from './mail-from.service';
 import { MailFrom, MailFromSchema } from './mail-from.schema';
 import { MailResult, MailResultSchema } from './mail-result.schema';
+import { Draft, DraftSchema } from '../agent/drafts/draft.schema';
 import { buildRedisConnection } from './bull-redis.config';
 import { MAIL_QUEUE } from './mail-job.types';
 
@@ -21,6 +22,7 @@ import { MAIL_QUEUE } from './mail-job.types';
     MongooseModule.forFeature([
       { name: MailFrom.name, schema: MailFromSchema },
       { name: MailResult.name, schema: MailResultSchema },
+      { name: Draft.name, schema: DraftSchema },
     ]),
 
     /**
