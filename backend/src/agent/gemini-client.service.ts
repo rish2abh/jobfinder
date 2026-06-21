@@ -136,7 +136,21 @@ export class GeminiClientService implements OnModuleInit {
         `tokens: ${usageMetadata?.totalTokenCount ?? 'N/A'}`,
       );
 
-      return { text, toolCalls, finishReason, usageMetadata  , rawParts: content?.parts ?? []};
+      // Patch any functionCall part that's missing a thoughtSignature —
+      // Gemini 3-series requires this field on model turns with function calls
+      // when replayed in conversation history.
+      const rawParts = (content?.parts ?? []).map((part: any) => {
+        if (part.functionCall && !part.thoughtSignature) {
+          this.logger.warn(
+            `[Gemini] functionCall part missing thoughtSignature — injecting dummy. ` +
+            `FC: ${part.functionCall?.name ?? 'unknown'}`,
+          );
+          return { ...part, thoughtSignature: 'skip_thought_signature_validator' };
+        }
+        return part;
+      });
+
+      return { text, toolCalls, finishReason, usageMetadata, rawParts };
     } catch (err: any) {
       const elapsed = Date.now() - startTime;
       const status = err?.response?.status;

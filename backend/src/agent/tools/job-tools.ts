@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AgentTool } from './tool-registry';
 import { GeminiFunctionDeclaration } from '../gemini-client.service';
 import { JobsService } from '../../jobs/jobs.service';
+import { JobsRepository } from '../../jobs/jobs.repository';
 import { MatchingService } from '../../matching/matching.service';
 
 /**
@@ -70,6 +71,7 @@ export class JobTools implements AgentTool {
 
   constructor(
     private readonly jobsService: JobsService,
+    private readonly jobsRepository: JobsRepository,
     private readonly matchingService: MatchingService,
   ) {}
 
@@ -195,15 +197,23 @@ export class JobTools implements AgentTool {
       ? scores.filter((s: any) => s.finalScore >= minScore)
       : scores;
 
+    // Enrich scores with actual job data (findByUser doesn't populate job refs)
+    const jobIds = filtered.map((s: any) => s.jobId?.toString()).filter(Boolean);
+    const jobs = await this.jobsRepository.findByIds(jobIds);
+    const jobMap = new Map(jobs.map((j) => [j._id.toString(), j]));
+
     return {
-      scores: filtered.map((s: any) => ({
-        jobId: s.jobId?.toString(),
-        title: s.job?.title ?? 'Unknown',
-        company: s.job?.company ?? 'Unknown',
-        location: s.job?.location,
-        finalScore: s.finalScore,
-        applyUrl: s.job?.applyUrl,
-      })),
+      scores: filtered.map((s: any) => {
+        const job = jobMap.get(s.jobId?.toString());
+        return {
+          jobId: s.jobId?.toString(),
+          title: job?.title ?? 'Unknown',
+          company: job?.company ?? 'Unknown',
+          location: job?.location,
+          finalScore: s.finalScore,
+          applyUrl: job?.applyUrl,
+        };
+      }),
       total,
       returned: filtered.length,
     };
