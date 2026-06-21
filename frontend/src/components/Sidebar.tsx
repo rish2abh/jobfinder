@@ -13,6 +13,8 @@ import {
   BarChart3,
   FileText,
   Users,
+  Bot,
+  FileCheck,
 } from 'lucide-react';
 import { useUserStore } from '../store/userStore';
 import { useAuthStore } from '../store/authStore';
@@ -21,6 +23,8 @@ import toast from 'react-hot-toast';
 
 const navItems = [
   { to: '/dashboard',               icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dashboard/agent',         icon: Bot,             label: 'Agent' },
+  { to: '/dashboard/drafts',        icon: FileCheck,       label: 'Drafts' },
   { to: '/dashboard/profile',       icon: UserCircle,      label: 'My Profile' },
   { to: '/dashboard/upload',        icon: Upload,          label: 'Upload Resume' },
   { to: '/dashboard/jobs',          icon: Search,          label: 'Job Scraper' },

@@ -31,38 +31,33 @@ export class JobsRepository {
       const postedAtDate = parsePostedAtDate(raw.postedAt);
 
       try {
-        const result = await this.model.updateOne(
-          { dedupeHash: hash },
-          {
-            $setOnInsert: {
-              title:         raw.title,
-              company:       raw.company,
-              location:      raw.location,
-              applyUrl:      raw.applyUrl,
-              scrapeUrl:     raw.scrapeUrl,
-              jd:            raw.jd,
-              contactEmail:  raw.contactEmail,
-              source:        raw.source,
-              postedAt:      raw.postedAt,
-              postedAtDate,
-              dedupeHash:    hash,
-              flagged:       raw.flagged ?? false,
-              flagReason:    raw.flagReason,
-              targetCompany: raw.targetCompany,
-            },
-            $set: {
-              matchedSkills,
-              queryKeywords,
-              scrapedAt: new Date(),
-              flagged: raw.flagged ?? false,
-              flagReason: raw.flagReason ?? null,
-              ...(raw.jd ? { jd: raw.jd } : {}),
-              ...(raw.contactEmail ? { contactEmail: raw.contactEmail } : {}),
-              ...(postedAtDate ? { postedAtDate } : {}),
-            },
-          },
-          { upsert: true },
-        );
+       const result = await this.model.updateOne(
+  { dedupeHash: hash },
+  {
+    $setOnInsert: {
+      title:         raw.title,
+      company:       raw.company,
+      location:      raw.location,
+      applyUrl:      raw.applyUrl,
+      scrapeUrl:     raw.scrapeUrl,
+      source:        raw.source,
+      postedAt:      raw.postedAt,
+      dedupeHash:    hash,
+      targetCompany: raw.targetCompany,
+    },
+    $set: {
+      matchedSkills,
+      queryKeywords,
+      scrapedAt: new Date(),
+      flagged: raw.flagged ?? false,
+      flagReason: raw.flagReason ?? null,
+      ...(raw.jd ? { jd: raw.jd } : {}),
+      ...(raw.contactEmail ? { contactEmail: raw.contactEmail } : {}),
+      ...(postedAtDate ? { postedAtDate } : {}),
+    },
+  },
+  { upsert: true },
+);
 
         if (result.upsertedCount > 0) inserted++;
         else duplicates++;

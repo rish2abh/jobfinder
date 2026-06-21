@@ -10,6 +10,9 @@ import Jobs from './pages/Jobs';
 import JobListings from './pages/JobListings';
 import Cache from './pages/Cache';
 import ApplicationsPage from './pages/ApplicationsPage';
+import Agent from './pages/Agent';
+import AgentActivity from './pages/AgentActivity';
+import Drafts from './pages/Drafts';
 import DashboardLayout from './components/DashboardLayout';
 import AuthLayout from './pages/auth/AuthLayout';
 import LoginPage from './pages/auth/LoginPage';
@@ -49,6 +52,9 @@ export default function App() {
               <Route path="applications" element={<ApplicationsPage />} />
               <Route path="matching"      element={<MatchingPage />} />
               <Route path="contacts"      element={<ContactsPage />} />
+              <Route path="agent"          element={<Agent />} />
+              <Route path="agent-activity" element={<AgentActivity />} />
+              <Route path="drafts"         element={<Drafts />} />
             </Route>
           </Route>
 

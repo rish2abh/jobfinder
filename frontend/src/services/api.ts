@@ -721,3 +721,93 @@ export const retryJob = (type: 'resume-parse' | 'job-scrape', jobId: string) =>
   api.post<{ status: string; jobId: string }>(`/jobs/monitor/retry/${type}/${jobId}`).then((r) => r.data);
 
 export default api;
+
+// ── Agent ──────────────────────────────────────────────────────────────────
+
+export type DraftStatus = 'pending' | 'edited' | 'approved' | 'rejected' | 'sent' | 'failed';
+export type DraftType = 'cold_outreach' | 'reply';
+
+export interface AgentDraft {
+  _id: string;
+  userId: string;
+  type: DraftType;
+  status: DraftStatus;
+  recipient: string;
+  subject: string;
+  body: string;
+  sourceThreadId?: string;
+  createdByRunId: string;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentAction {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
+  durationMs: number;
+}
+
+export interface JournalEntry {
+  _id: string;
+  userId: string;
+  conversationId: string;
+  userMessage: string;
+  agentResponse: string;
+  actions: AgentAction[];
+  iterations: number;
+  tokenUsage?: { prompt: number; completion: number; total: number };
+  durationMs: number;
+  error?: string;
+  timestamp: string;
+}
+
+export interface JournalResponse {
+  entries: JournalEntry[];
+  total: number;
+}
+
+export interface AgentRunResult {
+  runId?: string;
+  summary?: string;
+  response: string;
+  actions: AgentAction[];
+  conversationId: string;
+  iterations: number;
+  tokenUsage?: { prompt: number; completion: number; total: number };
+}
+
+export interface AgentRunStatus {
+  jobId: string;
+  state: string;
+  progress: number;
+  result: AgentRunResult | null;
+  failedReason: string | null;
+}
+
+export interface AgentJournalEntry extends JournalEntry {
+  trigger?: string;
+  summary?: string;
+}
+
+export const sendAgentMessage = (message: string, conversationId?: string) =>
+  api.post<{ jobId: string; conversationId: string; status: string }>('/agent/chat', { message, conversationId }).then((r) => r.data);
+
+export const getAgentRunStatus = (jobId: string) =>
+  api.get<AgentRunStatus>(`/agent/chat/status/${jobId}`).then((r) => r.data);
+
+export const getAgentJournal = (params?: { skip?: number; limit?: number }) =>
+  api.get<JournalResponse>('/agent/journal', { params }).then((r) => r.data);
+
+export const getAgentDrafts = () =>
+  api.get<AgentDraft[]>('/agent/drafts').then((r) => r.data);
+
+export const approveDraft = (draftId: string) =>
+  api.post<{ status: string; draftId: string }>(`/agent/drafts/${draftId}/approve`).then((r) => r.data);
+
+export const rejectDraft = (draftId: string) =>
+  api.post<AgentDraft>(`/agent/drafts/${draftId}/reject`).then((r) => r.data);
+
+export const editDraft = (draftId: string, data: { subject?: string; body?: string }) =>
+  api.patch<AgentDraft>(`/agent/drafts/${draftId}`, data).then((r) => r.data);
